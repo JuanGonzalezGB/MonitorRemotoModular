@@ -1,11 +1,37 @@
 #!/usr/bin/env python3
+import os
+import sys
 import subprocess
 
 
+def resource_path(relative_path: str) -> str:
+    """Devuelve la ruta correcta tanto en desarrollo como en PyInstaller."""
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+
 def get_data() -> str:
+    script_path = resource_path("monitor_pc.sh")
+
+    if not os.path.exists(script_path):
+        print(f"Script no encontrado: {script_path}")
+        return ""
+
     try:
-        return subprocess.check_output(["./monitor_pc.sh"]).decode()
-    except Exception:
+        return subprocess.check_output(
+            ["bash", script_path],
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        print("Timeout ejecutando script")
+        return ""
+    except subprocess.CalledProcessError as e:
+        print(f"Script terminó con error (código {e.returncode})")
+        return ""
+    except Exception as e:
+        print(f"Error inesperado: {e}")
         return ""
 
 
