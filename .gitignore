@@ -5,3 +5,7 @@ __pycache__
 *.pyc
 __init__.py
 *.json
+venv/
+dist/
+build/
+*.spec

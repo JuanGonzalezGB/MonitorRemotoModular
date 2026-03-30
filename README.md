@@ -15,4 +15,4 @@ o directamente con gui(pensado para pantalla 3.5" en raspberry pi)
 
 puede instalar con pyinstaller:
 
-    python3 PyInstaller --name="Temp Monitor Beta"  main.py
+    python3 -m PyInstaller --name="Temp Monitor Beta"  main.py
