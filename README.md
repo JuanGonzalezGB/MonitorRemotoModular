@@ -16,3 +16,7 @@ o directamente con gui(pensado para pantalla 3.5" en raspberry pi)
 puede instalar con pyinstaller:
 
     python3 -m PyInstaller --onedir --add-data "monitor_pc.sh:." --name="Temp Monitor Beta"  main.py
+
+This project includes code generated with assistance of AI tools and manually reviewed and modified by the author.
+
+Este proyecto incluye código generado con asistencia de herramientas de IA, manualmente revisado y modificado por el autor.

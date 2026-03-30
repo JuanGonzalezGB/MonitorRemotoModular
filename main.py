@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Juan S.G. Castellanos
+
 """
 Entry point del monitor.
 Lee el tema desde config.json (creado automáticamente en el primer arranque).
