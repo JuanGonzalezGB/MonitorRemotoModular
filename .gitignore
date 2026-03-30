@@ -1,0 +1,6 @@
+monitor_gui.py
+*.pyzz
+*.shzz
+__pycache__
+*.pyc
+__init__.py
