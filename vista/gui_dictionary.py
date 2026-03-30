@@ -1,4 +1,4 @@
-from estilo import dark, light, matrix, crimson
+from estilo import dark, light, matrix, crimson, teal
 
 # ─── Registro de temas ───────────────────────────────────────────────────────
 # Para agregar un tema:
@@ -10,6 +10,7 @@ CLASESTEMAS: dict = {
     "dark": dark.DarkColor,
     "matrix": matrix.MatrixColor,
     "crimson_dark": crimson.CrimsonColor,
+    "teal_dark": teal.TealColor,
     "light": light.LightColor
 }
 
@@ -18,7 +19,8 @@ TEMAS: dict[str, str] = {
     "Oscuro": "dark",
     "Claro": "light",
     "Matrix": "matrix",
-    "Blood" : "crimson_dark"
+    "Blood" : "crimson_dark",
+    "Turquesa":"teal_dark"
 }
 
 # ─── Fuentes compartidas ─────────────────────────────────────────────────────
