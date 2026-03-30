@@ -1,28 +1,11 @@
 #!/usr/bin/env python3
 import subprocess
-import os
-import sys
-
-
-def resource_path(relative_path: str) -> str:
-    """
-    Devuelve la ruta correcta tanto en desarrollo como en PyInstaller.
-    """
-    if hasattr(sys, "_MEIPASS"):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
 
 
 def get_data() -> str:
-    script_path = resource_path("monitor_pc.sh")
-
     try:
-        return subprocess.check_output(
-            ["bash", script_path],
-            text=True
-        )
-    except Exception as e:
-        print("Error ejecutando script:", e)
+        return subprocess.check_output(["./monitor_pc.sh"]).decode()
+    except Exception:
         return ""
 
 
@@ -38,14 +21,11 @@ def parse() -> tuple[float | None, float | None, list[tuple[str, float]]]:
         line = line.strip()
 
         if line == "CPU:":
-            mode = "cpu"
-            continue
+            mode = "cpu"; continue
         elif line == "GPU:":
-            mode = "gpu"
-            continue
+            mode = "gpu"; continue
         elif line == "CORES:":
-            mode = "cores"
-            continue
+            mode = "cores"; continue
 
         if not line:
             continue

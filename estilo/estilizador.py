@@ -1,35 +1,28 @@
 from abc import ABC, abstractmethod
+
+
 class Estilo(ABC):
-    @abstractmethod    
-    def colorBg(self):
-        pass
-    @abstractmethod   
-    def colorBg2(self):
-        pass
-    @abstractmethod   
-    def colorBorder(self):
-        pass
-    @abstractmethod   
-    def colorGreen(self):
-        pass
-    @abstractmethod   
-    def colorOrange(self):
-        pass
-    @abstractmethod   
-    def colorRed(self):
-        pass
-    @abstractmethod   
-    def colorCyan(self):
-        pass
-    @abstractmethod   
-    def colorBlue(self):
-        pass
-    @abstractmethod   
-    def colorWhite(self):
-        pass
-    @abstractmethod   
-    def colorMuted(self):
-        pass
-    @abstractmethod   
-    def colorBoton(self):
-        pass
+    @abstractmethod
+    def colorBg(self) -> str: pass
+    @abstractmethod
+    def colorBg2(self) -> str: pass
+    @abstractmethod
+    def colorBorder(self) -> str: pass
+    @abstractmethod
+    def colorGreen(self) -> str: pass
+    @abstractmethod
+    def colorOrange(self) -> str: pass
+    @abstractmethod
+    def colorRed(self) -> str: pass
+    @abstractmethod
+    def colorCyan(self) -> str: pass
+    @abstractmethod
+    def colorBlue(self) -> str: pass
+    @abstractmethod
+    def colorWhite(self) -> str: pass
+    @abstractmethod
+    def colorMuted(self) -> str: pass
+    @abstractmethod
+    def colorBoton(self) -> str: pass
+    @abstractmethod
+    def getNombre(self) -> str: pass
