@@ -10,10 +10,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable
 from estilo.estilizador import Estilo
-from controlador.controladorTemas import (
-    etiquetar,
-    ROL_BG, ROL_BG2, ROL_BORDER, ROL_CYAN, ROL_MUTED, ROL_WHITE,
-)
+from controlador.controladorTemas import  etiquetar
+from vista.gui_dictionary import ROL_BG, ROL_BG2, ROL_BORDER, ROL_CYAN, ROL_MUTED, ROL_WHITE
 
 
 F_TITLE  = ("monospace", 10, "bold")
