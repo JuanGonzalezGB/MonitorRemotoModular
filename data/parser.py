@@ -12,17 +12,24 @@ def resource_path(relative_path: str) -> str:
 
 
 def get_data() -> str:
+    from modelo.config import get_ip
+
     script_path = resource_path("monitor_pc.sh")
 
     if not os.path.exists(script_path):
         print(f"Script no encontrado: {script_path}")
         return ""
 
+    # Pasar la IP como variable de entorno — el .sh la lee con ${MONITOR_IP:-fallback}
+    env = os.environ.copy()
+    env["MONITOR_IP"] = get_ip()
+
     try:
         return subprocess.check_output(
             ["bash", script_path],
             text=True,
             timeout=5,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         print("Timeout ejecutando script")

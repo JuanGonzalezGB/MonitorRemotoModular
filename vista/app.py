@@ -52,6 +52,7 @@ class MonitorApp:
         self.clock_lbl = make_header(
             self.root, self.estilo,
             on_theme=self._open_theme_selector,
+            on_config=self._open_config,
         )
         scroll_frame = make_scroll_area(self.root, self.estilo)
 
@@ -71,6 +72,10 @@ class MonitorApp:
     def _open_theme_selector(self):
         from vista.selectema import ThemeSelector
         ThemeSelector(self.root, self)
+
+    def _open_config(self):
+        from vista.configview import ConfigView
+        ConfigView(self.root, self)
 
     # ─── Callback del controlador (API pública requerida por el manual) ───────
 

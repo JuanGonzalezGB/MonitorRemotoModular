@@ -80,10 +80,12 @@ def apply_progressbar_styles(style: ttk.Style, estilo: Estilo) -> None:
 # ─── Widgets ─────────────────────────────────────────────────────────────────
 
 def make_header(parent: tk.Widget, estilo: Estilo,
-                on_theme: Callable | None = None) -> tk.Label:
+                on_theme: Callable | None = None,
+                on_config: Callable | None = None) -> tk.Label:
     """
-    Crea el header con título, reloj y botón 🎨.
+    Crea el header con título, reloj, botón 🎨 (temas) y ⚙️ (configuración).
     Devuelve el label del reloj.
+    Los botones se apilan a la derecha en orden: ⚙️ → 🎨 → reloj.
     """
     header = tk.Frame(parent, bg=estilo.bg)
     etiquetar(header, ROL_BG)
@@ -93,6 +95,19 @@ def make_header(parent: tk.Widget, estilo: Estilo,
                          bg=estilo.bg, fg=estilo.cyan, font=F_TITLE)
     etiquetar(lbl_title, ROL_BG, ROL_CYAN)
     lbl_title.pack(side="left")
+
+    if on_config:
+        btn_config = tk.Button(
+            header, text="⚙️",
+            bg=estilo.bg, fg=estilo.muted,
+            relief="flat", bd=0, cursor="hand2",
+            activebackground=estilo.bg,
+            activeforeground=estilo.cyan,
+            font=F_SMALL,
+            command=on_config,
+        )
+        etiquetar(btn_config, ROL_BG, ROL_MUTED)
+        btn_config.pack(side="right", padx=(0, 2))
 
     if on_theme:
         btn_theme = tk.Button(

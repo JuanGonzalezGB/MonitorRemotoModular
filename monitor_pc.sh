@@ -1,6 +1,13 @@
 #!/bin/bash
 
-IP="192.168.0.101"
+# IP se puede sobreescribir via variable de entorno (lo hace parser.py).
+# Si no se pasa, usa el valor hardcodeado como fallback.
+IP="${MONITOR_IP:-192.168.0.101}"
+
+# localhost apunta a 127.0.0.1 nativamente, pero lo normalizamos por claridad
+if [ "$IP" = "localhost" ]; then
+    IP="127.0.0.1"
+fi
 
 DATA=$(curl -s http://$IP:19999/api/v1/allmetrics?format=prometheus)
 

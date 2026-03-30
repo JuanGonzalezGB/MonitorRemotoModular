@@ -10,6 +10,7 @@ CONFIG_PATH = os.path.normpath(CONFIG_PATH)
 
 _DEFAULTS = {
     "tema": "dark",
+    "ip":   "localhost",
 }
 
 
@@ -37,4 +38,14 @@ def get_tema() -> str:
 def set_tema(codigo: str) -> None:
     data = _load()
     data["tema"] = codigo
+    _save(data)
+
+
+def get_ip() -> str:
+    return _load().get("ip", _DEFAULTS["ip"])
+
+
+def set_ip(ip: str) -> None:
+    data = _load()
+    data["ip"] = ip.strip()
     _save(data)
