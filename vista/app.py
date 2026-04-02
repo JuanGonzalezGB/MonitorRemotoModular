@@ -4,7 +4,7 @@ from tkinter import ttk
 from datetime import datetime
 
 from estilo.estilizador import Estilo
-from data.parser import parse, RamInfo, NetIface
+from data.parser import fetch_async, get_latest, RamInfo, NetIface
 from controlador.controladorTemas import ControladorTemas, etiquetar, ROL_BG2, ROL_MUTED, ROL_WHITE
 from vista.components import (
     apply_progressbar_styles,
@@ -20,6 +20,7 @@ from vista.components import (
 
 F_NORMAL = ("monospace", 10)
 F_SMALL  = ("monospace", 8)
+INTERVAL = 2000   # ms entre actualizaciones
 
 
 class MonitorApp:
@@ -27,9 +28,21 @@ class MonitorApp:
         self.estilo = estilo
         self.core_widgets: dict = {}
         self._cores_are_mhz: bool = False
-        self._last_gpu: float | None = None
+        self._has_gpu: bool = False          # se detecta en primer update
         self._cpu_detail = None
         self._gpu_detail = None
+        self._paused: bool = False
+        self._after_id = None
+
+        # Historiales independientes por canal — empiezan a acumular
+        # solo cuando se abre el diálogo por primera vez
+        from collections import deque
+        self._cpu_temp_hist:  deque = deque(maxlen=60)
+        self._cpu_usage_hist: deque = deque(maxlen=60)
+        self._gpu_temp_hist:  deque = deque(maxlen=60)
+        self._gpu_usage_hist: deque = deque(maxlen=60)
+        self._cpu_collecting: bool = False
+        self._gpu_collecting: bool = False
 
         self._build_window()
         self._build_styles()
@@ -60,36 +73,50 @@ class MonitorApp:
         )
         scroll_frame = make_scroll_area(self.root, self.estilo)
 
-        # ── Temperatura ──
-        cpu_panel   = make_panel(scroll_frame, "CPU",        self.estilo)
-        gpu_panel   = make_panel(scroll_frame, "GPU",        self.estilo)
-        cores_panel = make_panel(scroll_frame, "CPU DETAIL", self.estilo)
-
+        # ── CPU ──
+        cpu_panel = make_panel(scroll_frame, "CPU", self.estilo)
         self.cpu_label, self.cpu_bar = make_temp_widget(
             cpu_panel, self.estilo, on_click=self._open_cpu_detail)
-        self.gpu_label, self.gpu_bar = make_temp_widget(
-            gpu_panel, self.estilo, on_click=self._open_gpu_detail)
 
+        # ── GPU — se oculta si no hay datos, se reinserta antes de cores ──
+        self._gpu_panel = make_panel(scroll_frame, "GPU", self.estilo)
+        self.gpu_label, self.gpu_bar = make_temp_widget(
+            self._gpu_panel, self.estilo, on_click=self._open_gpu_detail)
+        self._gpu_panel.pack_forget()   # empieza oculto hasta confirmar GPU
+
+        # ── CPU DETAIL ──
+        cores_panel = make_panel(scroll_frame, "CPU DETAIL", self.estilo)
+        self._cores_panel_ref = cores_panel   # referencia para pack(before=)
         self.cores_frame = tk.Frame(cores_panel, bg=self.estilo.bg2)
         self.cores_frame._bg_rol = "bg2"
         self.cores_frame.pack(fill="x", padx=6, pady=(2, 6))
 
         # ── RAM ──
         ram_panel = make_panel(scroll_frame, "RAM", self.estilo)
-
         self._ram_label = tk.Label(ram_panel, text="--",
                                    bg=self.estilo.bg2, fg=self.estilo.white,
                                    font=F_NORMAL)
         etiquetar(self._ram_label, ROL_BG2, ROL_WHITE)
         self._ram_label.pack(anchor="w", padx=6)
-
         self._ram_bar = ttk.Progressbar(ram_panel, length=440, maximum=100,
                                         style="Ram.Horizontal.TProgressbar")
         self._ram_bar.pack(padx=6, pady=(2, 6))
 
-        # ── Red ──
+        # ── NET ──
         self._net_panel = make_panel(scroll_frame, "NET", self.estilo)
         self._net_widgets: dict[str, tuple[tk.Label, tk.Label, tk.Label]] = {}
+
+    # ─── Pausa ───────────────────────────────────────────────────────────────
+
+    def pause(self):
+        self._paused = True
+        if self._after_id:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
+
+    def resume(self):
+        self._paused = False
+        self._schedule()
 
     # ─── Selectores ──────────────────────────────────────────────────────────
 
@@ -99,26 +126,35 @@ class MonitorApp:
 
     def _open_config(self):
         from vista.configview import ConfigView
+        self.pause()
         ConfigView(self.root, self)
 
     # ─── Diálogos de detalle ─────────────────────────────────────────────────
 
     def _open_cpu_detail(self):
+        self._cpu_collecting = True   # empieza a acumular desde ahora
         if self._cpu_detail and self._cpu_detail.winfo_exists():
             self._cpu_detail.lift(); return
         from vista.detailview import DetailView
         self._cpu_detail = DetailView(
             self.root, self, title="CPU Detail",
-            color_temp=self.estilo.colorRed(), color_usage=self.estilo.colorBlue())
+            color_temp="red", color_usage="blue")
+        # Vuelca historial acumulado al diálogo recién abierto
+        for t, u in zip(self._cpu_temp_hist, self._cpu_usage_hist):
+            self._cpu_detail.push(t, u)
 
     def _open_gpu_detail(self):
-        if self._last_gpu is None: return
+        if not self._has_gpu: return
+        self._gpu_collecting = True   # empieza a acumular desde ahora
         if self._gpu_detail and self._gpu_detail.winfo_exists():
             self._gpu_detail.lift(); return
         from vista.detailview import DetailView
         self._gpu_detail = DetailView(
             self.root, self, title="GPU Detail",
-            color_temp=self.estilo.colorRed(), color_usage=self.estilo.colorBlue())
+            color_temp="red", color_usage="green")
+        # Vuelca historial acumulado al diálogo recién abierto
+        for t, u in zip(self._gpu_temp_hist, self._gpu_usage_hist):
+            self._gpu_detail.push(t, u)
 
     # ─── Callback del controlador ─────────────────────────────────────────────
 
@@ -134,12 +170,29 @@ class MonitorApp:
 
     # ─── Update loop ─────────────────────────────────────────────────────────
 
-    def _update(self):
-        cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net = parse()
+    def _schedule(self):
+        """Lanza fetch en background y programa la próxima lectura de resultado."""
+        fetch_async()
+        self._after_id = self.root.after(INTERVAL, self._tick)
 
-        self._last_gpu = gpu
+    def _tick(self):
+        """Lee el último resultado disponible y reprograma."""
+        if self._paused:
+            return
+        cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net = get_latest()
+
+        # GPU panel: mostrar justo después del CPU panel, antes de cores
+        if gpu is not None:
+            if not self._has_gpu:
+                self._has_gpu = True
+                self._gpu_panel.pack(fill="x", pady=3, padx=6,
+                                     before=self._cores_panel_ref)
+        else:
+            if self._has_gpu:
+                self._has_gpu = False
+                self._gpu_panel.pack_forget()
+
         cpu_display = cpu_temp if cpu_temp is not None else cpu
-
         self._refresh_temp(self.cpu_label, self.cpu_bar, cpu_display)
         self._refresh_temp(self.gpu_label, self.gpu_bar, gpu)
 
@@ -149,12 +202,23 @@ class MonitorApp:
         self._refresh_ram(ram)
         self._refresh_net(net)
 
-        if self._cpu_detail and self._cpu_detail.winfo_exists():
-            self._cpu_detail.push(cpu_display, cpu_usage)
-        if self._gpu_detail and self._gpu_detail.winfo_exists():
-            self._gpu_detail.push(gpu, gpu_usage)
+        # Acumular en historiales independientes
+        if self._cpu_collecting:
+            if cpu_display is not None: self._cpu_temp_hist.append(cpu_display)
+            if cpu_usage   is not None: self._cpu_usage_hist.append(cpu_usage)
+        if self._gpu_collecting:
+            if gpu       is not None: self._gpu_temp_hist.append(gpu)
+            if gpu_usage is not None: self._gpu_usage_hist.append(gpu_usage)
 
-        self.root.after(2000, self._update)
+        # Alimentar diálogos solo si están abiertos
+        if self._cpu_detail and self._cpu_detail.winfo_exists():
+            if cpu_display is not None: self._cpu_detail.push(cpu_display, cpu_usage)
+        if self._gpu_detail and self._gpu_detail.winfo_exists():
+            if gpu is not None: self._gpu_detail.push(gpu, gpu_usage)
+
+        self._schedule()
+
+    # ─── Refresh helpers ─────────────────────────────────────────────────────
 
     def _refresh_temp(self, label: tk.Label, bar: ttk.Progressbar,
                       temp: float | None):
@@ -174,34 +238,23 @@ class MonitorApp:
             self._ram_label.config(text="--", fg=self.estilo.white)
             self._ram_bar["value"] = 0
             return
-
-        # Color según uso: verde < 60%, naranja < 85%, rojo >= 85%
         if ram.pct < 60:
-            color = self.estilo.green
-            fg_rol = "green"
+            color, fg_rol = self.estilo.green, "green"
         elif ram.pct < 85:
-            color = self.estilo.orange
-            fg_rol = "orange"
+            color, fg_rol = self.estilo.orange, "orange"
         else:
-            color = self.estilo.red
-            fg_rol = "red"
-
-        used_str  = f"{ram.used_mib:.0f}"
-        total_str = f"{ram.total_mib:.0f}"
+            color, fg_rol = self.estilo.red, "red"
         self._ram_label.config(
-            text=f"{used_str} / {total_str} MiB  ({ram.pct:.1f}%)",
+            text=f"{ram.used_mib:.0f} / {ram.total_mib:.0f} MiB  ({ram.pct:.1f}%)",
             fg=color)
         self._ram_label._fg_rol = fg_rol
         self._ram_bar["value"] = ram.pct
-        self._ttk_style.configure("Ram.Horizontal.TProgressbar",
-            background=color)
+        self._ttk_style.configure("Ram.Horizontal.TProgressbar", background=color)
 
     def _refresh_net(self, net: list[NetIface]):
         current = set()
-
         for iface in net:
             current.add(iface.name)
-
             if iface.name not in self._net_widgets:
                 row = tk.Frame(self._net_panel, bg=self.estilo.bg2)
                 etiquetar(row, ROL_BG2)
@@ -231,18 +284,13 @@ class MonitorApp:
             lbl_recv.config(text=f"↓ {self._fmt_net(iface.recv_kbps)}")
             lbl_sent.config(text=f"↑ {self._fmt_net(iface.sent_kbps)}")
 
-        # Eliminar interfaces que ya no aparecen
         to_delete = [n for n in self._net_widgets if n not in current]
         for name in to_delete:
             self._net_widgets[name][0].master.destroy()
             del self._net_widgets[name]
 
-        # Padding inferior del panel
-        # (se añade solo una vez implícitamente por pack)
-
     @staticmethod
     def _fmt_net(kbps: float) -> str:
-        """Formatea kb/s a unidad legible."""
         if kbps >= 1024:
             return f"{kbps/1024:.1f} Mb/s"
         return f"{kbps:.1f} kb/s"
@@ -273,6 +321,6 @@ class MonitorApp:
         self.root.after(1000, self._tick_clock)
 
     def run(self):
-        self._update()
+        self._schedule()
         self._tick_clock()
         self.root.mainloop()

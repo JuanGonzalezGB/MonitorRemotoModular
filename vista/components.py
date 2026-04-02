@@ -79,7 +79,7 @@ def make_header(parent: tk.Widget, estilo: Estilo,
     etiquetar(header, ROL_BG)
     header.pack(fill="x", padx=6, pady=(4, 0))
 
-    lbl_title = tk.Label(header, text="RESOURCE MONITOR",
+    lbl_title = tk.Label(header, text="TEMP MONITOR",
                          bg=estilo.bg, fg=estilo.cyan, font=F_TITLE)
     etiquetar(lbl_title, ROL_BG, ROL_CYAN)
     lbl_title.pack(side="left")
@@ -167,11 +167,22 @@ def make_temp_widget(parent: tk.Frame, estilo: Estilo,
                      on_click: Callable | None = None):
     """
     Label de temperatura + barra. Devuelve (label, progressbar).
-    Si on_click se provee, la barra muestra cursor hand2 y dispara el callback.
+    Si on_click se provee, la barra muestra cursor hand2, ícono ⤢ y dispara el callback.
     """
-    lbl = tk.Label(parent, text="--", bg=estilo.bg2, fg=estilo.white, font=F_NORMAL)
+    header = tk.Frame(parent, bg=estilo.bg2)
+    etiquetar(header, ROL_BG2)
+    header.pack(fill="x", padx=6)
+
+    lbl = tk.Label(header, text="--", bg=estilo.bg2, fg=estilo.white, font=F_NORMAL)
     etiquetar(lbl, ROL_BG2, ROL_WHITE)
-    lbl.pack(anchor="w", padx=6)
+    lbl.pack(side="left")
+
+    if on_click:
+        lbl_icon = tk.Label(header, text="⤢", bg=estilo.bg2, fg=estilo.muted,
+                            font=F_SMALL, cursor="hand2")
+        etiquetar(lbl_icon, ROL_BG2, ROL_MUTED)
+        lbl_icon.pack(side="right", padx=(0, 2))
+        lbl_icon.bind("<Button-1>", lambda _: on_click())
 
     bar = ttk.Progressbar(parent, length=440, maximum=100)
     bar.pack(padx=6, pady=(2, 6))

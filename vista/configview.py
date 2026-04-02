@@ -186,11 +186,36 @@ class ConfigView(tk.Toplevel):
         super().destroy()
     def _save(self):
         ip = self._ip_var.get().strip()
-
         if not ip:
             self._lbl_status.config(text="La IP no puede estar vacía.",
                                     fg=self.estilo.red)
             return
+
+        config.set_ip(ip)
+        self._lbl_status.config(text=f"✓ Guardado. Conectando a: {ip}",
+                                fg=self.estilo.green)
+
+        def _cerrar():
+            #from data.parser import fetch_async, _lock, _latest
+            # Limpiar último resultado para que no queden datos del dispositivo anterior
+            import data.parser as p
+            with p._lock:
+                p._latest = p._EMPTY
+            for detail in (self._app._cpu_detail, self._app._gpu_detail):
+                if detail and detail.winfo_exists():
+                    detail.destroy()                
+            # Limpiar historiales de gráficas
+            self._app._cpu_temp_hist.clear()
+            self._app._cpu_usage_hist.clear()
+            self._app._gpu_temp_hist.clear()
+            self._app._gpu_usage_hist.clear()
+            # Resetear flags para que el diálogo no muestre datos viejos
+            self._app._cpu_collecting = False
+            self._app._gpu_collecting = False
+            self._app.resume()
+            self.destroy()
+
+        self.after(1200, _cerrar)
 
         config.set_ip(ip)
         self._lbl_status.config(
