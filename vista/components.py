@@ -79,7 +79,7 @@ def make_header(parent: tk.Widget, estilo: Estilo,
     etiquetar(header, ROL_BG)
     header.pack(fill="x", padx=6, pady=(4, 0))
 
-    lbl_title = tk.Label(header, text="TEMP MONITOR",
+    lbl_title = tk.Label(header, text="RESOURCES MONITOR",
                          bg=estilo.bg, fg=estilo.cyan, font=F_TITLE)
     etiquetar(lbl_title, ROL_BG, ROL_CYAN)
     lbl_title.pack(side="left")
