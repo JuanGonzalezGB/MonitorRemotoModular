@@ -159,6 +159,12 @@ class MonitorApp:
     # ─── Callback del controlador ─────────────────────────────────────────────
 
     def apply_estilo(self, nuevo_estilo: Estilo) -> None:
+        # Pausar el loop durante el retematizado para evitar
+        # condiciones de carrera entre _tick y _retemar_arbol
+        if self._after_id:
+            self.root.after_cancel(self._after_id)
+            self._after_id = None
+
         self.estilo = nuevo_estilo
         self.root.configure(bg=nuevo_estilo.bg)
         self._ttk_style.configure("Ram.Horizontal.TProgressbar",
@@ -167,6 +173,10 @@ class MonitorApp:
             if detail and detail.winfo_exists():
                 self._controlador_temas._retemar_arbol(detail, nuevo_estilo)
                 detail.apply_estilo(nuevo_estilo)
+
+        # Reanudar solo si no estamos en pausa explícita (ej: ConfigView abierto)
+        if not self._paused:
+            self._schedule()
 
     # ─── Update loop ─────────────────────────────────────────────────────────
 
