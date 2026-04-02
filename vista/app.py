@@ -17,10 +17,14 @@ from vista.components import (
     temp_fg_rol,
     bar_style,
 )
+from controlador.controladorGenerico import Cositas
 
 F_NORMAL = ("monospace", 10)
 F_SMALL  = ("monospace", 8)
 INTERVAL = 2000   # ms entre actualizaciones
+
+
+
 
 
 class MonitorApp:
@@ -106,17 +110,6 @@ class MonitorApp:
         self._net_panel = make_panel(scroll_frame, "NET", self.estilo)
         self._net_widgets: dict[str, tuple[tk.Label, tk.Label, tk.Label]] = {}
 
-    # ─── Pausa ───────────────────────────────────────────────────────────────
-
-    def pause(self):
-        self._paused = True
-        if self._after_id:
-            self.root.after_cancel(self._after_id)
-            self._after_id = None
-
-    def resume(self):
-        self._paused = False
-        self._schedule()
 
     # ─── Selectores ──────────────────────────────────────────────────────────
 
@@ -126,8 +119,9 @@ class MonitorApp:
 
     def _open_config(self):
         from vista.configview import ConfigView
-        self.pause()
-        ConfigView(self.root, self)
+        c = Cositas(self)
+        c.pause()
+        ConfigView(self.root, c ,self)
 
     # ─── Diálogos de detalle ─────────────────────────────────────────────────
 
@@ -161,10 +155,13 @@ class MonitorApp:
     def apply_estilo(self, nuevo_estilo: Estilo) -> None:
         # Pausar el loop durante el retematizado para evitar
         # condiciones de carrera entre _tick y _retemar_arbol
+        c = Cositas(self)
+        """
         if self._after_id:
             self.root.after_cancel(self._after_id)
-            self._after_id = None
+            self._after_id = None"""
 
+        c.pause()
         self.estilo = nuevo_estilo
         self.root.configure(bg=nuevo_estilo.bg)
         self._ttk_style.configure("Ram.Horizontal.TProgressbar",
@@ -175,8 +172,10 @@ class MonitorApp:
                 detail.apply_estilo(nuevo_estilo)
 
         # Reanudar solo si no estamos en pausa explícita (ej: ConfigView abierto)
+        """
         if not self._paused:
-            self._schedule()
+            self._schedule()"""
+        c.resume()
 
     # ─── Update loop ─────────────────────────────────────────────────────────
 

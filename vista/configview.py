@@ -16,18 +16,17 @@ from controlador.controladorTemas import (
     etiquetar,
     ROL_BG, ROL_BG2, ROL_BORDER, ROL_CYAN, ROL_MUTED, ROL_BOTON, ROL_WHITE,
 )
-
 F_TITLE  = FORMATS["F_TITLE"]
 F_NORMAL = FORMATS["F_NORMAL"]
 F_SMALL  = FORMATS["F_SMALL"]
 
 
 class ConfigView(tk.Toplevel):
-    def __init__(self, parent_window: tk.Tk, app):
+    def __init__(self, parent_window: tk.Tk, cositas ,app):
         super().__init__(parent_window)
         self._app = app
         self.estilo = EstiloFactory.definirEstilo(config.get_tema())
-
+        self._cositas = cositas
         self.title("Configuración")
         self.geometry("480x260")
         self.resizable(False, True)
@@ -39,6 +38,25 @@ class ConfigView(tk.Toplevel):
 
         self._build_ui()
 
+    def _cerrar(self):
+        #from data.parser import fetch_async, _lock, _latest
+        # Limpiar último resultado para que no queden datos del dispositivo anterior
+        import data.parser as p
+        with p._lock:
+            p._latest = p._EMPTY
+        for detail in (self._app._cpu_detail, self._app._gpu_detail):
+            if detail and detail.winfo_exists():
+                detail.destroy()                
+        # Limpiar historiales de gráficas
+        self._app._cpu_temp_hist.clear()
+        self._app._cpu_usage_hist.clear()
+        self._app._gpu_temp_hist.clear()
+        self._app._gpu_usage_hist.clear()
+        # Resetear flags para que el diálogo no muestre datos viejos
+        self._app._cpu_collecting = False
+        self._app._gpu_collecting = False
+        self._cositas.resume()
+        self.destroy()    
     # ─── Build ───────────────────────────────────────────────────────────────
 
     def _build_ui(self):
@@ -58,7 +76,7 @@ class ConfigView(tk.Toplevel):
                           bg=e.bg, fg=e.muted,
                           relief="flat", bd=0, cursor="hand2",
                           activebackground=e.bg, activeforeground=e.cyan,
-                          command=self.destroy)
+                          command=lambda: self._cerrar())
         etiquetar(btn_x, ROL_BG, ROL_MUTED)
         btn_x.pack(side="right")
 
@@ -167,7 +185,7 @@ class ConfigView(tk.Toplevel):
                                bg=e.bg, fg=e.muted,
                                relief="flat", bd=0, cursor="hand2",
                                activebackground=e.bg, activeforeground=e.cyan,
-                               command=self.destroy)
+                               command=lambda: self._cerrar())
         etiquetar(btn_cancel, ROL_BG, ROL_MUTED)
         btn_cancel.pack(side="left")
 
@@ -194,7 +212,9 @@ class ConfigView(tk.Toplevel):
         config.set_ip(ip)
         self._lbl_status.config(text=f"✓ Guardado. Conectando a: {ip}",
                                 fg=self.estilo.green)
-
+        
+        self._cerrar()
+        """
         def _cerrar():
             #from data.parser import fetch_async, _lock, _latest
             # Limpiar último resultado para que no queden datos del dispositivo anterior
@@ -212,10 +232,10 @@ class ConfigView(tk.Toplevel):
             # Resetear flags para que el diálogo no muestre datos viejos
             self._app._cpu_collecting = False
             self._app._gpu_collecting = False
-            self._app.resume()
-            self.destroy()
+            self._cositas.resume()
+            self.destroy()"""
 
-        self.after(1200, _cerrar)
+        self.after(1200, self._cerrar())
 
         config.set_ip(ip)
         self._lbl_status.config(
