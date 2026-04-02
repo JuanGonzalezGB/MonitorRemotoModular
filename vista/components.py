@@ -36,20 +36,14 @@ def temp_color(temp: float | None, estilo: Estilo) -> str:
 
 
 def _temp_rol(temp: float | None) -> str:
-    """Devuelve el ROL semántico correspondiente a la temperatura."""
     if temp is None or temp < 50:
-        return ROL_BG   # será reemplazado en el label dinámicamente
+        return ROL_BG
     elif temp < 70:
         return "orange"
     return "red"
 
 
 def temp_fg_rol(temp: float | None) -> str:
-    """
-    Rol de fg para un label de temperatura.
-    Usar junto con lbl._fg_rol = temp_fg_rol(temp) cada vez que se actualiza,
-    para que el próximo cambio de tema respete el estado actual.
-    """
     if temp is None:
         return "muted"
     if temp < 50:
@@ -68,7 +62,6 @@ def bar_style(temp: float | None) -> str:
 
 
 def apply_progressbar_styles(style: ttk.Style, estilo: Estilo) -> None:
-    """Registra los tres estilos de barra usando los colores del tema."""
     style.configure("Green.Horizontal.TProgressbar",
                     troughcolor=estilo.bg2, background=estilo.green)
     style.configure("Orange.Horizontal.TProgressbar",
@@ -82,11 +75,6 @@ def apply_progressbar_styles(style: ttk.Style, estilo: Estilo) -> None:
 def make_header(parent: tk.Widget, estilo: Estilo,
                 on_theme: Callable | None = None,
                 on_config: Callable | None = None) -> tk.Label:
-    """
-    Crea el header con título, reloj, botón 🎨 (temas) y ⚙️ (configuración).
-    Devuelve el label del reloj.
-    Los botones se apilan a la derecha en orden: ⚙️ → 🎨 → reloj.
-    """
     header = tk.Frame(parent, bg=estilo.bg)
     etiquetar(header, ROL_BG)
     header.pack(fill="x", padx=6, pady=(4, 0))
@@ -135,7 +123,6 @@ def make_header(parent: tk.Widget, estilo: Estilo,
 
 
 def make_scroll_area(parent: tk.Widget, estilo: Estilo):
-    """Crea el área scrollable. Devuelve el frame interior."""
     container = tk.Frame(parent, bg=estilo.bg)
     etiquetar(container, ROL_BG)
     container.pack(fill="both", expand=True)
@@ -166,7 +153,6 @@ def make_scroll_area(parent: tk.Widget, estilo: Estilo):
 
 
 def make_panel(parent: tk.Widget, title: str, estilo: Estilo) -> tk.Frame:
-    """Panel con título pequeño arriba."""
     frame = tk.Frame(parent, bg=estilo.bg2)
     etiquetar(frame, ROL_BG2)
     frame.pack(fill="x", pady=3, padx=6)
@@ -177,8 +163,12 @@ def make_panel(parent: tk.Widget, title: str, estilo: Estilo) -> tk.Frame:
     return frame
 
 
-def make_temp_widget(parent: tk.Frame, estilo: Estilo):
-    """Label de temperatura + barra. Devuelve (label, progressbar)."""
+def make_temp_widget(parent: tk.Frame, estilo: Estilo,
+                     on_click: Callable | None = None):
+    """
+    Label de temperatura + barra. Devuelve (label, progressbar).
+    Si on_click se provee, la barra muestra cursor hand2 y dispara el callback.
+    """
     lbl = tk.Label(parent, text="--", bg=estilo.bg2, fg=estilo.white, font=F_NORMAL)
     etiquetar(lbl, ROL_BG2, ROL_WHITE)
     lbl.pack(anchor="w", padx=6)
@@ -186,11 +176,14 @@ def make_temp_widget(parent: tk.Frame, estilo: Estilo):
     bar = ttk.Progressbar(parent, length=440, maximum=100)
     bar.pack(padx=6, pady=(2, 6))
 
+    if on_click:
+        bar.configure(cursor="hand2")
+        bar.bind("<Button-1>", lambda _: on_click())
+
     return lbl, bar
 
 
 def make_core_row(parent: tk.Frame, name: str, estilo: Estilo):
-    """Fila de un core individual. Devuelve (lbl_nombre, lbl_temp)."""
     row = tk.Frame(parent, bg=estilo.bg2)
     etiquetar(row, ROL_BG2)
     row.pack(fill="x")
@@ -200,7 +193,7 @@ def make_core_row(parent: tk.Frame, name: str, estilo: Estilo):
     lbl_name.pack(side="left")
 
     lbl_temp = tk.Label(row, text="--", bg=estilo.bg2, fg=estilo.white, font=F_SMALL)
-    etiquetar(lbl_temp, ROL_BG2, ROL_WHITE)   # rol inicial; se actualiza en cada refresh
+    etiquetar(lbl_temp, ROL_BG2, ROL_WHITE)
     lbl_temp.pack(side="right")
 
     return lbl_name, lbl_temp

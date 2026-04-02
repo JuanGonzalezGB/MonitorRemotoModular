@@ -35,6 +35,7 @@ class ConfigView(tk.Toplevel):
 
         self.grab_set()
         self.focus_set()
+        self._scroll_bindings = []
 
         self._build_ui()
 
@@ -97,13 +98,13 @@ class ConfigView(tk.Toplevel):
                     lambda e: canvas.scan_dragto(e.x, e.y, gain=1))
 
         # Scroll mouse
-        canvas.bind_all("<MouseWheel>",
-                        lambda e: canvas.yview_scroll(
-                            int(-1 * (e.delta / 120)), "units"))
-        canvas.bind_all("<Button-4>",
-                        lambda e: canvas.yview_scroll(-1, "units"))
-        canvas.bind_all("<Button-5>",
-                        lambda e: canvas.yview_scroll(1, "units"))
+        bid1 = self.bind_all("<MouseWheel>",
+            lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+        bid2 = self.bind_all("<Button-4>",
+            lambda e: canvas.yview_scroll(-1, "units"))
+        bid3 = self.bind_all("<Button-5>",
+            lambda e: canvas.yview_scroll(1, "units"))
+        self._scroll_bindings = [("<MouseWheel>", bid1), ("<Button-4>", bid2), ("<Button-5>", bid3)]
 
         # ── Contenido del scroll ─────────────────────────────────────────────
         body = tk.Frame(scroll_frame, bg=e.bg)
@@ -179,6 +180,10 @@ class ConfigView(tk.Toplevel):
 
     # ─── Acción ──────────────────────────────────────────────────────────────
 
+    def destroy(self):
+        for event, _ in self._scroll_bindings:
+            self.unbind_all(event)
+        super().destroy()
     def _save(self):
         ip = self._ip_var.get().strip()
 
