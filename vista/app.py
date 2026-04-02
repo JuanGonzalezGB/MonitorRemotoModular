@@ -2,10 +2,12 @@
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
+from collections import deque
 
 from estilo.estilizador import Estilo
-from data.parser import fetch_async, get_latest, RamInfo, NetIface
+from data.parser import fetch_async, get_latest, RamInfo, NetIface, LoadInfo
 from controlador.controladorTemas import ControladorTemas, etiquetar, ROL_BG2, ROL_MUTED, ROL_WHITE
+from controlador.controladorGenerico import Cositas
 from vista.components import (
     apply_progressbar_styles,
     make_header,
@@ -17,14 +19,10 @@ from vista.components import (
     temp_fg_rol,
     bar_style,
 )
-from controlador.controladorGenerico import Cositas
 
 F_NORMAL = ("monospace", 10)
 F_SMALL  = ("monospace", 8)
-INTERVAL = 2000   # ms entre actualizaciones
-
-
-
+INTERVAL = 2000
 
 
 class MonitorApp:
@@ -32,15 +30,12 @@ class MonitorApp:
         self.estilo = estilo
         self.core_widgets: dict = {}
         self._cores_are_mhz: bool = False
-        self._has_gpu: bool = False          # se detecta en primer update
+        self._has_gpu: bool = False
         self._cpu_detail = None
         self._gpu_detail = None
         self._paused: bool = False
         self._after_id = None
 
-        # Historiales independientes por canal — empiezan a acumular
-        # solo cuando se abre el diálogo por primera vez
-        from collections import deque
         self._cpu_temp_hist:  deque = deque(maxlen=60)
         self._cpu_usage_hist: deque = deque(maxlen=60)
         self._gpu_temp_hist:  deque = deque(maxlen=60)
@@ -82,18 +77,49 @@ class MonitorApp:
         self.cpu_label, self.cpu_bar = make_temp_widget(
             cpu_panel, self.estilo, on_click=self._open_cpu_detail)
 
-        # ── GPU — se oculta si no hay datos, se reinserta antes de cores ──
+        # ── GPU — empieza oculto, se inserta antes de CPU DETAIL si hay datos ──
         self._gpu_panel = make_panel(scroll_frame, "GPU", self.estilo)
         self.gpu_label, self.gpu_bar = make_temp_widget(
             self._gpu_panel, self.estilo, on_click=self._open_gpu_detail)
-        self._gpu_panel.pack_forget()   # empieza oculto hasta confirmar GPU
+        self._gpu_panel.pack_forget()
 
         # ── CPU DETAIL ──
         cores_panel = make_panel(scroll_frame, "CPU DETAIL", self.estilo)
-        self._cores_panel_ref = cores_panel   # referencia para pack(before=)
+        self._cores_panel_ref = cores_panel
+
+        # Encabezado de tabla — se oculta en ARM (sin freq)
+        self._cores_header = tk.Frame(cores_panel, bg=self.estilo.bg2)
+        self._cores_header._bg_rol = "bg2"
+        self._cores_header.pack(fill="x", padx=6, pady=(2, 0))
+        """
+        tk.Label(self._cores_header, text="", bg=self.estilo.bg2,
+                fg=self.estilo.muted, font=F_SMALL, width=8, anchor="w"
+                ).pack(side="left")  # columna nombre (vacía en header)"""
+        lbl_h_core = tk.Label(self._cores_header, text="CPU/CORE",
+                            bg=self.estilo.bg2, fg=self.estilo.muted,
+                            font=F_SMALL, width=8, anchor="w")
+        lbl_h_core.pack(side="left")
+        etiquetar(lbl_h_core, ROL_BG2, ROL_MUTED)
+
+        lbl_h_temp = tk.Label(self._cores_header, text="TEMP",
+                              bg=self.estilo.bg2, fg=self.estilo.muted,
+                              font=F_SMALL, width=10, anchor="e")
+        etiquetar(lbl_h_temp, ROL_BG2, ROL_MUTED)
+        lbl_h_temp.pack(side="left")
+        self._lbl_h_freq = tk.Label(self._cores_header, text="FREQ",
+                                    bg=self.estilo.bg2, fg=self.estilo.muted,
+                                    font=F_SMALL, width=10, anchor="e")
+        etiquetar(self._lbl_h_freq, ROL_BG2, ROL_MUTED)
+        self._lbl_h_freq.pack(side="right")
+        self._cores_header.pack_forget()  # oculto hasta Intel confirmado
+
+
+
+        lbl_h_core.pack(side="left")
+
         self.cores_frame = tk.Frame(cores_panel, bg=self.estilo.bg2)
         self.cores_frame._bg_rol = "bg2"
-        self.cores_frame.pack(fill="x", padx=6, pady=(2, 6))
+        self.cores_frame.pack(fill="x", padx=6, pady=(0, 6))
 
         # ── RAM ──
         ram_panel = make_panel(scroll_frame, "RAM", self.estilo)
@@ -110,6 +136,34 @@ class MonitorApp:
         self._net_panel = make_panel(scroll_frame, "NET", self.estilo)
         self._net_widgets: dict[str, tuple[tk.Label, tk.Label, tk.Label]] = {}
 
+        # ── LOAD AVERAGE ──
+        load_panel = make_panel(scroll_frame, "LOAD AVG", self.estilo)
+        self._load_frame = tk.Frame(load_panel, bg=self.estilo.bg2)
+        self._load_frame._bg_rol = "bg2"
+        self._load_frame.pack(fill="x", padx=6, pady=(2, 6))
+
+        self._lbl_load1  = self._make_load_label(self._load_frame, "1 min")
+        self._lbl_load5  = self._make_load_label(self._load_frame, "5 min")
+        self._lbl_load15 = self._make_load_label(self._load_frame, "15 min")
+
+    # ─── Helpers de construcción ─────────────────────────────────────────────
+
+    def _make_load_label(self, parent: tk.Frame, period: str) -> tk.Label:
+        row = tk.Frame(parent, bg=self.estilo.bg2)
+        etiquetar(row, ROL_BG2)
+        row.pack(fill="x")
+
+        lbl_name = tk.Label(row, text=period, bg=self.estilo.bg2,
+                            fg=self.estilo.muted, font=F_SMALL,
+                            width=8, anchor="w")
+        etiquetar(lbl_name, ROL_BG2, ROL_MUTED)
+        lbl_name.pack(side="left")
+
+        lbl_val = tk.Label(row, text="--", bg=self.estilo.bg2,
+                           fg=self.estilo.white, font=F_SMALL)
+        etiquetar(lbl_val, ROL_BG2, ROL_WHITE)
+        lbl_val.pack(side="right")
+        return lbl_val
 
     # ─── Selectores ──────────────────────────────────────────────────────────
 
@@ -121,46 +175,37 @@ class MonitorApp:
         from vista.configview import ConfigView
         c = Cositas(self)
         c.pause()
-        ConfigView(self.root, c ,self)
+        ConfigView(self.root, c, self)
 
     # ─── Diálogos de detalle ─────────────────────────────────────────────────
 
     def _open_cpu_detail(self):
-        self._cpu_collecting = True   # empieza a acumular desde ahora
+        self._cpu_collecting = True
         if self._cpu_detail and self._cpu_detail.winfo_exists():
             self._cpu_detail.lift(); return
         from vista.detailview import DetailView
         self._cpu_detail = DetailView(
             self.root, self, title="CPU Detail",
             color_temp="red", color_usage="blue")
-        # Vuelca historial acumulado al diálogo recién abierto
         for t, u in zip(self._cpu_temp_hist, self._cpu_usage_hist):
             self._cpu_detail.push(t, u)
 
     def _open_gpu_detail(self):
         if not self._has_gpu: return
-        self._gpu_collecting = True   # empieza a acumular desde ahora
+        self._gpu_collecting = True
         if self._gpu_detail and self._gpu_detail.winfo_exists():
             self._gpu_detail.lift(); return
         from vista.detailview import DetailView
         self._gpu_detail = DetailView(
             self.root, self, title="GPU Detail",
             color_temp="red", color_usage="green")
-        # Vuelca historial acumulado al diálogo recién abierto
         for t, u in zip(self._gpu_temp_hist, self._gpu_usage_hist):
             self._gpu_detail.push(t, u)
 
-    # ─── Callback del controlador ─────────────────────────────────────────────
+    # ─── Callback del controlador de temas ───────────────────────────────────
 
     def apply_estilo(self, nuevo_estilo: Estilo) -> None:
-        # Pausar el loop durante el retematizado para evitar
-        # condiciones de carrera entre _tick y _retemar_arbol
         c = Cositas(self)
-        """
-        if self._after_id:
-            self.root.after_cancel(self._after_id)
-            self._after_id = None"""
-
         c.pause()
         self.estilo = nuevo_estilo
         self.root.configure(bg=nuevo_estilo.bg)
@@ -170,27 +215,20 @@ class MonitorApp:
             if detail and detail.winfo_exists():
                 self._controlador_temas._retemar_arbol(detail, nuevo_estilo)
                 detail.apply_estilo(nuevo_estilo)
-
-        # Reanudar solo si no estamos en pausa explícita (ej: ConfigView abierto)
-        """
-        if not self._paused:
-            self._schedule()"""
         c.resume()
 
     # ─── Update loop ─────────────────────────────────────────────────────────
 
     def _schedule(self):
-        """Lanza fetch en background y programa la próxima lectura de resultado."""
         fetch_async()
         self._after_id = self.root.after(INTERVAL, self._tick)
 
     def _tick(self):
-        """Lee el último resultado disponible y reprograma."""
         if self._paused:
             return
-        cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net = get_latest()
+        cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load = get_latest()
 
-        # GPU panel: mostrar justo después del CPU panel, antes de cores
+        # GPU panel: aparece/desaparece según datos
         if gpu is not None:
             if not self._has_gpu:
                 self._has_gpu = True
@@ -208,10 +246,12 @@ class MonitorApp:
         if cores:
             self._cores_are_mhz = cores[0][1] > 200
         self._refresh_cores(cores)
+        self._refresh_freq(freq)
         self._refresh_ram(ram)
         self._refresh_net(net)
+        self._refresh_load(load)
 
-        # Acumular en historiales independientes
+        # Acumular historiales
         if self._cpu_collecting:
             if cpu_display is not None: self._cpu_temp_hist.append(cpu_display)
             if cpu_usage   is not None: self._cpu_usage_hist.append(cpu_usage)
@@ -219,7 +259,7 @@ class MonitorApp:
             if gpu       is not None: self._gpu_temp_hist.append(gpu)
             if gpu_usage is not None: self._gpu_usage_hist.append(gpu_usage)
 
-        # Alimentar diálogos solo si están abiertos
+        # Alimentar diálogos abiertos
         if self._cpu_detail and self._cpu_detail.winfo_exists():
             if cpu_display is not None: self._cpu_detail.push(cpu_display, cpu_usage)
         if self._gpu_detail and self._gpu_detail.winfo_exists():
@@ -304,22 +344,91 @@ class MonitorApp:
             return f"{kbps/1024:.1f} Mb/s"
         return f"{kbps:.1f} kb/s"
 
+    def _refresh_load(self, load: LoadInfo | None):
+        if load is None:
+            for lbl in (self._lbl_load1, self._lbl_load5, self._lbl_load15):
+                lbl.config(text="--", fg=self.estilo.white)
+                lbl._fg_rol = ROL_WHITE
+            return
+        for lbl, val in ((self._lbl_load1,  load.load1),
+                         (self._lbl_load5,  load.load5),
+                         (self._lbl_load15, load.load15)):
+            if val < 1.0:
+                color, rol = self.estilo.green, "green"
+            elif val < 2.0:
+                color, rol = self.estilo.orange, "orange"
+            else:
+                color, rol = self.estilo.red, "red"
+            lbl.config(text=f"{val:.2f}", fg=color)
+            lbl._fg_rol = rol
+
+    def _freq_color(self, mhz: float) -> tuple[str, str]:
+        """Color de frecuencia relativo al boost máximo (i3-9100F: 4200MHz)."""
+        if mhz >= 3500:
+            return self.estilo.green, "green"
+        elif mhz >= 2000:
+            return self.estilo.orange, "orange"
+        return self.estilo.red, "red"
+
+    def _refresh_freq(self, freq: list[tuple[str, float]]):
+        """En Intel: actualiza columna FREQ con color semántico."""
+        if self._cores_are_mhz or not freq:
+            return
+        freq_map = dict(freq)
+        for name, widgets in self.core_widgets.items():
+            lbl_freq = widgets[2]
+            mhz = freq_map.get(name)
+            if mhz is None:
+                continue
+            color, rol = self._freq_color(mhz)
+            lbl_freq.config(text=f"{mhz:.0f}MHz", fg=color)
+            lbl_freq._fg_rol = rol
+
     def _refresh_cores(self, cores: list[tuple[str, float]]):
         current_names = set()
         for name, val in cores:
             current_names.add(name)
             if name not in self.core_widgets:
-                lbl_name, lbl_val = make_core_row(
-                    self.cores_frame, name, self.estilo)
-                self.core_widgets[name] = (lbl_name, lbl_val)
-            lbl_name, lbl_val = self.core_widgets[name]
+                row = tk.Frame(self.cores_frame, bg=self.estilo.bg2)
+                etiquetar(row, ROL_BG2)
+                row.pack(fill="x")
+
+                lbl_name = tk.Label(row, text=name, bg=self.estilo.bg2,
+                                    fg=self.estilo.muted, font=F_SMALL,
+                                    width=8, anchor="w")
+                etiquetar(lbl_name, ROL_BG2, ROL_MUTED)
+                lbl_name.pack(side="left")
+
+                lbl_temp = tk.Label(row, text="--", bg=self.estilo.bg2,
+                                    fg=self.estilo.white, font=F_SMALL,
+                                    width=10, anchor="e")
+                etiquetar(lbl_temp, ROL_BG2, ROL_WHITE)
+                lbl_temp.pack(side="left")
+
+                lbl_freq = tk.Label(row, text="", bg=self.estilo.bg2,
+                                    fg=self.estilo.cyan, font=F_SMALL,
+                                    width=10, anchor="e")
+                etiquetar(lbl_freq, ROL_BG2, "cyan")
+                lbl_freq.pack(side="right")
+
+                self.core_widgets[name] = (lbl_name, lbl_temp, lbl_freq)
+
+            lbl_name, lbl_temp, lbl_freq = self.core_widgets[name]
+
             if self._cores_are_mhz:
-                lbl_val.config(text=f"{val:.0f} MHz", fg=self.estilo.white)
-                lbl_val._fg_rol = "white"
+                # ARM: solo freq, sin encabezado
+                self._cores_header.pack_forget()
+                lbl_temp.config(text=f"{val:.0f} MHz", fg=self.estilo.white)
+                lbl_temp._fg_rol = "white"
+                lbl_freq.config(text="")
             else:
+                # Intel: temp en lbl_temp, freq en lbl_freq
+                self._cores_header.pack(fill="x", padx=6, pady=(2, 0),
+                                        before=self.cores_frame)
                 color = temp_color(val, self.estilo)
-                lbl_val.config(text=f"{val:.1f}°C", fg=color)
-                lbl_val._fg_rol = temp_fg_rol(val)
+                lbl_temp.config(text=f"{val:.1f}°C", fg=color)
+                lbl_temp._fg_rol = temp_fg_rol(val)
+
         to_delete = [n for n in self.core_widgets if n not in current_names]
         for name in to_delete:
             self.core_widgets[name][0].master.destroy()

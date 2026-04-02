@@ -40,6 +40,12 @@ class NetIface:
     recv_kbps: float
     sent_kbps: float
 
+@dataclass
+class LoadInfo:
+    load1:  float
+    load5:  float
+    load15: float
+
 
 ParseResult = tuple[
     float | None,
@@ -50,16 +56,20 @@ ParseResult = tuple[
     float | None,
     RamInfo | None,
     list[NetIface],
+    list[tuple[str, float]],   # freq: [(cpu0, MHz), ...]
+    LoadInfo | None,
 ]
 
-_EMPTY: ParseResult = (None, None, [], None, None, None, None, [])
+_EMPTY: ParseResult = (None, None, [], None, None, None, None, [], [], None)
 
 
 def _parse_raw(raw: str) -> ParseResult:
     lines = raw.splitlines()
     cpu = gpu = cpu_temp = cpu_usage = gpu_usage = None
     ram: RamInfo | None = None
+    load: LoadInfo | None = None
     cores: list[tuple[str, float]] = []
+    freq: list[tuple[str, float]] = []
     net_raw: dict[str, dict[str, float]] = {}
     mode = None
 
@@ -73,6 +83,8 @@ def _parse_raw(raw: str) -> ParseResult:
         elif line == "GPU_USAGE:": mode = "gpu_usage"; continue
         elif line == "RAM:":       mode = "ram";       continue
         elif line == "NET:":       mode = "net";       continue
+        elif line == "FREQ:":      mode = "freq";      continue
+        elif line == "LOAD:":      mode = "load";      continue
         if not line:
             continue
 
@@ -97,6 +109,19 @@ def _parse_raw(raw: str) -> ParseResult:
                 try:
                     ram = RamInfo(float(parts[0]), float(parts[1]), float(parts[2]))
                 except ValueError: pass
+        elif mode == "freq":
+            if ":" in line:
+                name, val = line.split(":", 1)
+                try: freq.append((name.strip(), float(val)))
+                except ValueError: pass
+
+        elif mode == "load":
+            parts = line.split(":")
+            if len(parts) == 3:
+                try:
+                    load = LoadInfo(float(parts[0]), float(parts[1]), float(parts[2]))
+                except ValueError: pass
+
         elif mode == "net":
             # formato: iface:dimension:value
             parts = line.split(":")
@@ -114,7 +139,7 @@ def _parse_raw(raw: str) -> ParseResult:
 
     net = [NetIface(iface, d.get("received", 0.0), d.get("sent", 0.0))
            for iface, d in net_raw.items()]
-    return cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net
+    return cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load
 
 
 # ─── API asíncrona ───────────────────────────────────────────────────────────

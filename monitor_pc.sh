@@ -33,10 +33,10 @@ CORES_INTEL=$(echo "$DATA" | grep "Core" | grep input | grep -v alarm | grep -v 
 
 if [ -z "$CORES_INTEL" ]; then
     FREQ_LINES=$(echo "$DATA" | grep 'netdata_cpufreq_cpufreq_MHz_average' | grep -v '^#' | \
-        sed -E 's/.*dimension="cpu([0-9]+)"[^}]*\} ([0-9.]+) [0-9]+$/Core \1:\2/')
-    UNIQUE_FREQS=$(echo "$FREQ_LINES" | sed -E 's/Core [0-9]+://' | sort -u | wc -l)
+        sed -E 's/.*dimension="cpu([0-9]+)"[^}]*\} ([0-9.]+) [0-9]+$/Cpu \1:\2/')
+    UNIQUE_FREQS=$(echo "$FREQ_LINES" | sed -E 's/Cpu [0-9]+://' | sort -u | wc -l)
     if [ "$UNIQUE_FREQS" -eq 1 ]; then
-        FREQ_VAL=$(echo "$FREQ_LINES" | sed -E 's/Core [0-9]+://' | head -1)
+        FREQ_VAL=$(echo "$FREQ_LINES" | sed -E 's/Cpu [0-9]+://' | head -1)
         echo "CPU Freq:$FREQ_VAL"
     else
         echo "$FREQ_LINES"
@@ -101,3 +101,20 @@ echo "NET:"
 echo "$DATA" | grep 'netdata_net_net_kilobits_persec_average' | grep -v '^#' | \
     grep 'interface_type="real"' | \
     sed -E 's/.*dimension="([^"]+)".*device="([^"]+)".*\} ([0-9.]+) [0-9]+$/\2:\1:\3/'
+
+# ─── FRECUENCIA POR CORE (Intel y ARM) ───────────────────────────────────────
+echo "FREQ:"
+echo "$DATA" | grep 'netdata_cpufreq_cpufreq_MHz_average' | grep -v '^#' | \
+    sed -E 's/.*dimension="cpu([0-9]+)"[^}]*\} ([0-9.]+) [0-9]+$/Core \1:\2/'
+
+# ─── LOAD AVERAGE ─────────────────────────────────────────────────────────────
+echo "LOAD:"
+LOAD1=$(echo "$DATA"  | grep 'netdata_system_load_load_average' | grep -v '^#' | \
+    grep 'dimension="load1"'  | sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/')
+LOAD5=$(echo "$DATA"  | grep 'netdata_system_load_load_average' | grep -v '^#' | \
+    grep 'dimension="load5"'  | sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/')
+LOAD15=$(echo "$DATA" | grep 'netdata_system_load_load_average' | grep -v '^#' | \
+    grep 'dimension="load15"' | sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/')
+if [ -n "$LOAD1" ] && [ -n "$LOAD5" ] && [ -n "$LOAD15" ]; then
+    echo "${LOAD1}:${LOAD5}:${LOAD15}"
+fi
