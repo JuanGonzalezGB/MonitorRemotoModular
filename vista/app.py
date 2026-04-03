@@ -35,7 +35,7 @@ class MonitorApp:
         self._gpu_detail = None
         self._paused: bool = False
         self._after_id = None
-
+        self._freq_max_observed: float = 1.0 
         self._net_hist: dict[str, dict[str, list[float]]] = {}  # iface -> {rx, tx, peak_rx, peak_tx}
 
         self._ram_total_mib: float = 1024.0
@@ -506,10 +506,12 @@ class MonitorApp:
         self._lbl_power_status._fg_rol = rol
 
     def _freq_color(self, mhz: float) -> tuple[str, str]:
-        """Color de frecuencia relativo al boost máximo (i3-9100F: 4200MHz)."""
-        if mhz >= 3500:
+        if mhz > self._freq_max_observed:
+            self._freq_max_observed = mhz
+        pct = (mhz / self._freq_max_observed) * 100
+        if pct >= 85:
             return self.estilo.red, "red"
-        elif mhz >= 2000:
+        elif pct >= 50:
             return self.estilo.orange, "orange"
         return self.estilo.green, "green"
 
