@@ -51,7 +51,7 @@ class MetricDetail(tk.Toplevel):
         self._destroyed  = False
 
         self.title(title)
-        self.geometry("460x240")
+        self.geometry("480x240")
         self.resizable(False, False)
         self.configure(bg=app.estilo.bg)
         self.after(100, self.grab_set)
