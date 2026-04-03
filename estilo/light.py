@@ -4,11 +4,11 @@ from estilo.estilizador import Estilo
 class LightColor(Estilo):
     def __init__(self):     
         self.nombre = "light"
-        self.bg ="#f5f5f0"
-        self.bg2 ="#ebebe5"  
-        self.border ="#d0d0c8"
-        self.green ="#1a7a3a"  
-        self.orange = "#b85c00"   
+        self.bg ="#ecdcd2"
+        self.bg2 ="#ebdbd5"  
+        self.border ="#41412b"
+        self.green ="#19b37f"  
+        self.orange = "#e0bd20"   
         self.red = "#c0392b"   
         self.cyan = "#1a7a6a"   
         self.blue = "#2a5fa8"   

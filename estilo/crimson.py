@@ -6,17 +6,17 @@ class CrimsonColor(Estilo):
 
         self.bg = "#0a0505"        # negro rojizo profundo
         self.bg2 = "#120707"       # fondo secundario más visible
-        self.border = "#2a0d0d"    # bordes rojo oscuro apagado
+        self.border = "#920c0c"    # bordes rojo oscuro apagado
 
-        self.green = "#2ecc71"     # good (verde clásico para contraste funcional)
-        self.orange = "#ffb347"    # mid (ámbar/naranja suave tipo warning)
-        self.red = "#ff3b3b"       # bad (rojo principal del tema)
+        self.green = "#ff0000"     # good (verde clásico para contraste funcional)
+        self.orange = "#ff807b"    # mid (ámbar/naranja suave tipo warning)
+        self.red = "#ffbebe"       # bad (rojo principal del tema)
 
         self.cyan = "#ff6b6b"      # acento rojo-rosado tipo highlight
         self.blue = "#b22222"      # rojo oscuro azulado (crimson frío)
 
         self.white = "#f2e9e9"     # texto claro con tinte cálido
-        self.muted = "#5a2a2a"     # texto apagado rojizo
+        self.muted = "#805353"     # texto apagado rojizo
 
         self.boton = "#1a0a0a"     # botones oscuros con leve rojo
         

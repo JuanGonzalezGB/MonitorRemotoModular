@@ -48,8 +48,9 @@ class LoadInfo:
 
 @dataclass
 class ProcessInfo:
-    name: str
-    value: float   # CPU % o RAM MiB
+    name:  str
+    value: float        # CPU % o RAM privada MiB
+    rss:   float = 0.0  # RAM RSS MiB (solo para procesos RAM)
 
 @dataclass
 class PowerInfo:
@@ -81,7 +82,7 @@ ParseResult = tuple[
     LoadInfo | None,
     PowerInfo | None,
     list[ProcessInfo],          # top CPU
-    list[ProcessInfo],          # top RAM
+    list[ProcessInfo],          # top RAM (value=priv, rss=rss)
 ]
 
 _EMPTY: ParseResult = (None, None, [], None, None, None, None, [], [], None, None, [], [])
@@ -95,6 +96,7 @@ def _parse_raw(raw: str) -> ParseResult:
     power: PowerInfo | None = None
     procs_cpu: list[ProcessInfo] = []
     procs_ram: list[ProcessInfo] = []
+    procs_ram_priv: dict[str, float] = {}
     cores: list[tuple[str, float]] = []
     freq: list[tuple[str, float]] = []
     net_raw: dict[str, dict[str, float]] = {}
@@ -113,8 +115,9 @@ def _parse_raw(raw: str) -> ParseResult:
         elif line == "FREQ:":      mode = "freq";      continue
         elif line == "LOAD:":      mode = "load";      continue
         elif line == "POWER:":     mode = "power";     continue
-        elif line == "PROCS_CPU:": mode = "procs_cpu"; continue
-        elif line == "PROCS_RAM:": mode = "procs_ram"; continue
+        elif line == "PROCS_CPU:":      mode = "procs_cpu";      continue
+        elif line == "PROCS_RAM:":      mode = "procs_ram";      continue
+        elif line == "PROCS_RAM_PRIV:": mode = "procs_ram_priv"; continue
         if not line:
             continue
 
@@ -159,21 +162,26 @@ def _parse_raw(raw: str) -> ParseResult:
                     power = PowerInfo(float(parts[0]), float(parts[1]), float(parts[2]))
                 except ValueError: pass
 
-        elif mode in ("procs_cpu", "procs_ram"):
+        elif mode in ("procs_cpu", "procs_ram", "procs_ram_priv"):
             if ":" in line:
                 idx = line.rfind(":")
                 name, val_str = line[:idx], line[idx+1:]
                 try:
-                    p = ProcessInfo(name.strip(), float(val_str))
-                    if mode == "procs_cpu": procs_cpu.append(p)
-                    else:                   procs_ram.append(p)
+                    val = float(val_str)
+                    name = name.strip()
+                    if mode == "procs_cpu":
+                        procs_cpu.append(ProcessInfo(name, val))
+                    elif mode == "procs_ram":
+                        procs_ram.append(ProcessInfo(name, val))
+                    elif mode == "procs_ram_priv":
+                        procs_ram_priv[name] = val
                 except ValueError: pass
 
         elif mode == "net":
             # formato: iface:dimension:value
             parts = line.split(":")
             if len(parts) == 3:
-                iface, dim, val_str = parts  
+                iface, dim, val_str = parts
                 try:
                     val = abs(float(val_str))
                     net_raw.setdefault(iface, {})[dim] = val
@@ -184,11 +192,17 @@ def _parse_raw(raw: str) -> ParseResult:
                 try: cores.append((name.strip(), float(val)))
                 except ValueError: pass
 
-                   
-
     net = [NetIface(iface, d.get("received", 0.0), d.get("sent", 0.0))
            for iface, d in net_raw.items()]
-    return cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load, power, procs_cpu, procs_ram
+
+    # Cruzar RAM: ordenar por privada, anotar RSS
+    procs_ram_merged: list[ProcessInfo] = []
+    for p in procs_ram:
+        priv = procs_ram_priv.get(p.name, p.value)
+        procs_ram_merged.append(ProcessInfo(p.name, priv, p.value))
+    procs_ram_merged.sort(key=lambda x: x.value, reverse=True)
+
+    return cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load, power, procs_cpu, procs_ram_merged
 
 
 # ─── API asíncrona ───────────────────────────────────────────────────────────

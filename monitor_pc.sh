@@ -134,16 +134,43 @@ if [ -n "$VOLT_CLEAR" ]; then
 fi
 
 # ─── TOP PROCESOS por CPU ─────────────────────────────────────────────────────
+# Netdata reporta CPU % relativo a un core — normalizamos por nCores
+# para que 100% = toda la CPU ocupada.
+# Contamos cores desde cpufreq (una línea por core) o fallback a nproc.
+NCORES=$(echo "$DATA" | grep 'netdata_cpufreq_cpufreq_MHz_average' | grep -v '^#' | wc -l)
+[ "$NCORES" -eq 0 ] && NCORES=$(nproc 2>/dev/null || echo 1)
+
 echo "PROCS_CPU:"
 echo "$DATA" | grep 'netdata_app_cpu_utilization_percentage_average' | grep -v '^#' | \
     sed -E 's/.*app_group="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\1 \2/' | \
-    LC_ALL=C awk '{cpu[$1]+=$2} END {for(p in cpu) print p":"cpu[p]}' | \
-    LC_ALL=C sort -t: -k2 -rn | head -5
+    LC_ALL=C awk -v cores="$NCORES" '
+        { if ($2 > 0) cpu[$1] += $2 }
+        END {
+            for (p in cpu) {
+                val = cpu[p] / cores
+                if (val > 0.05) print p ":" val
+            }
+        }
+    ' | LC_ALL=C sort -t: -k2 -rn | head -5
 
 # ─── TOP PROCESOS por RAM ─────────────────────────────────────────────────────
+# Filtramos solo chart="app.NOM_mem_usage" (formato exacto de Netdata por app_group)
+# y tomamos la primera aparición para evitar doble conteo de cgroups/users/sessions
 echo "PROCS_RAM:"
 echo "$DATA" | grep 'netdata_app_mem_usage_MiB_average' | grep -v '^#' | \
     grep 'dimension="rss"' | \
-    sed -E 's/.*app_group="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\1 \2/' | \
-    LC_ALL=C awk '{ram[$1]+=$2} END {for(p in ram) print p":"ram[p]}' | \
-    LC_ALL=C sort -t: -k2 -rn | head -5
+    sed -E 's/.*chart="app\.([^"]+)_mem_usage".*app_group="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\2:\3/' | \
+    grep -E '^[^:]+:[0-9]' | \
+    LC_ALL=C awk -F: '
+        !seen[$1]++ { if ($2+0 > 0) print $1 ":" $2 }
+    ' | LC_ALL=C sort -t: -k2 -rn | head -5
+
+# ─── TOP PROCESOS por RAM PRIVADA ─────────────────────────────────────────────
+echo "PROCS_RAM_PRIV:"
+echo "$DATA" | grep 'netdata_app_mem_private_usage_MiB_average' | grep -v '^#' | \
+    grep 'dimension="mem"' | \
+    sed -E 's/.*chart="app\.([^"]+)_mem_private_usage".*app_group="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\2:\3/' | \
+    grep -E '^[^:]+:[0-9]' | \
+    LC_ALL=C awk -F: '
+        !seen[$1]++ { if ($2+0 > 0) print $1 ":" $2 }
+    ' | LC_ALL=C sort -t: -k2 -rn | head -5

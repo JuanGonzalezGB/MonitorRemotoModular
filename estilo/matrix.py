@@ -9,14 +9,14 @@ class MatrixColor(Estilo):
         self.border = "#143214"    # bordes verdes apagados
 
         self.green = "#00ff41"   # good (neón matrix puro)
-        self.orange = "#ffd13b"  # mid (amarillo-néon verdoso, tipo warning)
-        self.red = "#e54100"     # bad (verde más profundo + tinte “peligro”)
+        self.orange = "#dbff3b"  # mid (amarillo-néon verdoso, tipo warning)
+        self.red = "#ffd900"     # bad (verde más profundo + tinte “peligro”)
         
         self.cyan = "#39ff88"      # verde agua brillante
         self.blue = "#00ff9c"      # verde azulado neón
 
         self.white = "#c8ffd6"     # texto claro verdoso
-        self.muted = "#2a3d2a"     # texto apagado / sombras
+        self.muted = "#3b693b"     # texto apagado / sombras
 
         self.boton = "#06210a"     # botones oscuros con tinte verde
         
