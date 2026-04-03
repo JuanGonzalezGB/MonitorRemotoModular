@@ -114,7 +114,10 @@ def _parse_raw(raw: str) -> ParseResult:
         elif line == "LOAD:":      mode = "load";      continue
         elif line == "POWER:":     mode = "power";     continue
         elif line == "PROCS_CPU:": mode = "procs_cpu"; continue
-        elif line == "PROCS_RAM:": mode = "procs_ram"; continue
+        elif line == "PROCS_RAM:": 
+            mode = "procs_ram"
+            print("=== ENTRANDO PROCS_RAM ===")
+            continue
         if not line:
             continue
 
@@ -142,6 +145,7 @@ def _parse_raw(raw: str) -> ParseResult:
         elif mode == "freq":
             if ":" in line:
                 name, val = line.split(":", 1)
+                print(f"PROCS_RAM raw -> {name.strip()} = {val_str.strip()}")
                 try: freq.append((name.strip(), float(val)))
                 except ValueError: pass
 
@@ -160,6 +164,7 @@ def _parse_raw(raw: str) -> ParseResult:
                 except ValueError: pass
 
         elif mode in ("procs_cpu", "procs_ram"):
+            print(f"[{mode}] línea cruda: '{line}'")  # ← temporal
             if ":" in line:
                 idx = line.rfind(":")
                 name, val_str = line[:idx], line[idx+1:]

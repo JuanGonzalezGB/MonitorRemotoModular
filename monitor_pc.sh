@@ -136,7 +136,7 @@ fi
 # ─── TOP PROCESOS por CPU ─────────────────────────────────────────────────────
 echo "PROCS_CPU:"
 echo "$DATA" | grep 'netdata_app_cpu_utilization_percentage_average' | grep -v '^#' | \
-    sed -E 's/.*app_group="([^"]+)".*\} ([0-9.]+) [0-9]+$/\1 \2/' | \
+    sed -E 's/.*app_group="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\1 \2/' | \
     LC_ALL=C awk '{cpu[$1]+=$2} END {for(p in cpu) print p":"cpu[p]}' | \
     LC_ALL=C sort -t: -k2 -rn | head -5
 
@@ -144,5 +144,6 @@ echo "$DATA" | grep 'netdata_app_cpu_utilization_percentage_average' | grep -v '
 echo "PROCS_RAM:"
 echo "$DATA" | grep 'netdata_app_mem_usage_MiB_average' | grep -v '^#' | \
     grep 'dimension="rss"' | \
-    sed -E 's/.*app_group="([^"]+)".*\} ([0-9.]+) [0-9]+$/\1:\2/' | \
+    sed -E 's/.*app_group="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\1 \2/' | \
+    LC_ALL=C awk '{ram[$1]+=$2} END {for(p in ram) print p":"ram[p]}' | \
     LC_ALL=C sort -t: -k2 -rn | head -5
