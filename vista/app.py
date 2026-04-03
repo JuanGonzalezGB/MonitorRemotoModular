@@ -47,7 +47,7 @@ class MonitorApp:
         self._cpu_collecting: bool = False
         self._gpu_collecting: bool = False
         self._has_power: bool = False
-
+        self._metric_dialogs: dict[str, object] = {}  # key → MetricDetail abierto
         self._build_window()
         self._build_styles()
         self._build_ui()
@@ -131,7 +131,10 @@ class MonitorApp:
         etiquetar(self._ram_label, ROL_BG2, ROL_WHITE)
         self._ram_label.pack(anchor="w", padx=6)
         self._ram_bar = ttk.Progressbar(ram_panel, length=440, maximum=100,
-                                        style="Ram.Horizontal.TProgressbar")
+                                        style="Ram.Horizontal.TProgressbar",
+                                        cursor="hand2")
+        self._ram_bar.bind("<Button-1>", lambda _: self._open_metric("ram_system",
+            "RAM del sistema", "system.ram", ["used"], "MiB", "blue"))
         self._ram_bar.pack(padx=6, pady=(2, 6))
 
         # ── NET ──
@@ -244,6 +247,7 @@ class MonitorApp:
                             fg=self.estilo.muted, font=F_SMALL,
                             anchor="w")
         etiquetar(lbl_name, ROL_BG2, ROL_MUTED)
+        lbl_name.config(cursor="hand2")
         lbl_name.pack(side="left", fill="x", expand=True)
 
         lbl_val = tk.Label(row, text="", bg=self.estilo.bg2,
@@ -317,6 +321,10 @@ class MonitorApp:
             if detail and detail.winfo_exists():
                 self._controlador_temas._retemar_arbol(detail, nuevo_estilo)
                 detail.apply_estilo(nuevo_estilo)
+        for d in self._metric_dialogs.values():
+            if d.winfo_exists():
+                self._controlador_temas._retemar_arbol(d, nuevo_estilo)
+                d.apply_estilo(nuevo_estilo)
         c.resume()
 
     # ─── Update loop ─────────────────────────────────────────────────────────
@@ -586,6 +594,8 @@ class MonitorApp:
                 p = procs[i]
                 name = p.name if len(p.name) <= 22 else p.name[:20] + "…"
                 lbl_name.config(text=name)
+                lbl_name.bind("<Button-1>", lambda e, n=p.name, cpu=is_cpu:
+                    self._open_proc_metric(n, cpu))
 
                 if is_cpu:
                     if p.value < 30:
@@ -625,6 +635,42 @@ class MonitorApp:
                 mac="",
                 net_hist=h)
         
+    def _open_metric(self, key: str, title: str, chart: str,
+                     dims: list[str], unit: str, rol: str):
+        from modelo.config import get_ip
+        from vista.metric_detail import MetricDetail
+        if key in self._metric_dialogs:
+            d = self._metric_dialogs[key]
+            if d.winfo_exists():
+                d.lift(); return
+        d = MetricDetail(
+            self.root, self,
+            title=title,
+            ip=get_ip(),
+            chart=chart,
+            dims=dims,
+            unit=unit,
+            rol_line=rol,
+        )
+        self._metric_dialogs[key] = d
+ 
+    def _open_proc_metric(self, group: str, is_cpu: bool):
+        if is_cpu:
+            key   = f"cpu_{group}"
+            title = f"{group} — CPU"
+            chart = f"app.{group}_cpu_utilization"
+            dims  = ["user", "system"]
+            unit  = "%"
+            rol   = "cyan"
+        else:
+            key   = f"ram_{group}"
+            title = f"{group} — RAM privada"
+            chart = f"app.{group}_mem_private_usage"
+            dims  = ["mem"]
+            unit  = "MiB"
+            rol   = "blue"
+        self._open_metric(key, title, chart, dims, unit, rol)
+
     def _tick_clock(self):
         self.clock_lbl.config(text=datetime.now().strftime("%H:%M:%S"))
         self.root.after(1000, self._tick_clock)
