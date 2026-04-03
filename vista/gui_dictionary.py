@@ -23,9 +23,17 @@ TEMAS: dict[str, str] = {
     "Turquesa":"teal_dark"
 }
 
-# ─── Fuentes compartidas ─────────────────────────────────────────────────────
+GRAPHFORMAT: dict = {
+    "GRAPH_W" : 440,
+    "GRAPH_H" : 60
+}
+
 FORMATS: dict = {
-    "F_TITLE":  ("monospace", 10, "bold"),
-    "F_NORMAL": ("monospace", 10),
-    "F_SMALL":  ("monospace", 8),
+    "F_TITLE"  : ("monospace", 10, "bold"),
+    "F_NORMAL" : ("monospace", 10),
+    "F_SMALL"  : ("monospace", 8),
+    "COL_NAME"   : 14,
+    "COL_IP"     : 15,
+    "COL_VENDOR" : 12,
+    "COL_PING"   :  6
 }

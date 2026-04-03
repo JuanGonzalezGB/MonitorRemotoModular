@@ -46,6 +46,27 @@ class LoadInfo:
     load5:  float
     load15: float
 
+@dataclass
+class ProcessInfo:
+    name: str
+    value: float   # CPU % o RAM MiB
+
+@dataclass
+class PowerInfo:
+    clear: float   # 1.0 = alimentación OK
+    critical: float
+    fault: float
+
+    @property
+    def ok(self) -> bool:
+        return self.critical < 0.5 and self.fault < 0.5
+
+    @property
+    def status(self) -> str:
+        if self.fault >= 0.5:    return "fault"
+        if self.critical >= 0.5: return "critical"
+        return "ok"
+
 
 ParseResult = tuple[
     float | None,
@@ -56,11 +77,14 @@ ParseResult = tuple[
     float | None,
     RamInfo | None,
     list[NetIface],
-    list[tuple[str, float]],   # freq: [(cpu0, MHz), ...]
+    list[tuple[str, float]],   # freq
     LoadInfo | None,
+    PowerInfo | None,
+    list[ProcessInfo],          # top CPU
+    list[ProcessInfo],          # top RAM
 ]
 
-_EMPTY: ParseResult = (None, None, [], None, None, None, None, [], [], None)
+_EMPTY: ParseResult = (None, None, [], None, None, None, None, [], [], None, None, [], [])
 
 
 def _parse_raw(raw: str) -> ParseResult:
@@ -68,6 +92,9 @@ def _parse_raw(raw: str) -> ParseResult:
     cpu = gpu = cpu_temp = cpu_usage = gpu_usage = None
     ram: RamInfo | None = None
     load: LoadInfo | None = None
+    power: PowerInfo | None = None
+    procs_cpu: list[ProcessInfo] = []
+    procs_ram: list[ProcessInfo] = []
     cores: list[tuple[str, float]] = []
     freq: list[tuple[str, float]] = []
     net_raw: dict[str, dict[str, float]] = {}
@@ -85,6 +112,9 @@ def _parse_raw(raw: str) -> ParseResult:
         elif line == "NET:":       mode = "net";       continue
         elif line == "FREQ:":      mode = "freq";      continue
         elif line == "LOAD:":      mode = "load";      continue
+        elif line == "POWER:":     mode = "power";     continue
+        elif line == "PROCS_CPU:": mode = "procs_cpu"; continue
+        elif line == "PROCS_RAM:": mode = "procs_ram"; continue
         if not line:
             continue
 
@@ -122,11 +152,28 @@ def _parse_raw(raw: str) -> ParseResult:
                     load = LoadInfo(float(parts[0]), float(parts[1]), float(parts[2]))
                 except ValueError: pass
 
+        elif mode == "power":
+            parts = line.split(":")
+            if len(parts) == 3:
+                try:
+                    power = PowerInfo(float(parts[0]), float(parts[1]), float(parts[2]))
+                except ValueError: pass
+
+        elif mode in ("procs_cpu", "procs_ram"):
+            if ":" in line:
+                idx = line.rfind(":")
+                name, val_str = line[:idx], line[idx+1:]
+                try:
+                    p = ProcessInfo(name.strip(), float(val_str))
+                    if mode == "procs_cpu": procs_cpu.append(p)
+                    else:                   procs_ram.append(p)
+                except ValueError: pass
+
         elif mode == "net":
             # formato: iface:dimension:value
             parts = line.split(":")
             if len(parts) == 3:
-                iface, dim, val_str = parts
+                iface, dim, val_str = parts  
                 try:
                     val = abs(float(val_str))
                     net_raw.setdefault(iface, {})[dim] = val
@@ -137,9 +184,11 @@ def _parse_raw(raw: str) -> ParseResult:
                 try: cores.append((name.strip(), float(val)))
                 except ValueError: pass
 
+                   
+
     net = [NetIface(iface, d.get("received", 0.0), d.get("sent", 0.0))
            for iface, d in net_raw.items()]
-    return cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load
+    return cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load, power, procs_cpu, procs_ram
 
 
 # ─── API asíncrona ───────────────────────────────────────────────────────────

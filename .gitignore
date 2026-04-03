@@ -10,3 +10,4 @@ dist/
 build/
 *.spec
 flujo_resource_monitor.svg
+resumen_sesion.txt

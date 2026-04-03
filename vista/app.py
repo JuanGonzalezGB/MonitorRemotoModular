@@ -5,7 +5,7 @@ from datetime import datetime
 from collections import deque
 
 from estilo.estilizador import Estilo
-from data.parser import fetch_async, get_latest, RamInfo, NetIface, LoadInfo
+from data.parser import fetch_async, get_latest, RamInfo, NetIface, LoadInfo, PowerInfo, ProcessInfo
 from controlador.controladorTemas import ControladorTemas, etiquetar, ROL_BG2, ROL_MUTED, ROL_WHITE
 from controlador.controladorGenerico import Cositas
 from vista.components import (
@@ -22,7 +22,7 @@ from vista.components import (
 
 F_NORMAL = ("monospace", 10)
 F_SMALL  = ("monospace", 8)
-INTERVAL = 2000
+INTERVAL = 500
 
 
 class MonitorApp:
@@ -36,12 +36,16 @@ class MonitorApp:
         self._paused: bool = False
         self._after_id = None
 
+        self._net_hist: dict[str, dict[str, list[float]]] = {}  # iface -> {rx, tx, peak_rx, peak_tx}
+
+        self._ram_total_mib: float = 1024.0 
         self._cpu_temp_hist:  deque = deque(maxlen=60)
         self._cpu_usage_hist: deque = deque(maxlen=60)
         self._gpu_temp_hist:  deque = deque(maxlen=60)
         self._gpu_usage_hist: deque = deque(maxlen=60)
         self._cpu_collecting: bool = False
         self._gpu_collecting: bool = False
+        self._has_power: bool = False
 
         self._build_window()
         self._build_styles()
@@ -114,12 +118,10 @@ class MonitorApp:
         self._cores_header.pack_forget()  # oculto hasta Intel confirmado
 
 
-
-        lbl_h_core.pack(side="left")
-
         self.cores_frame = tk.Frame(cores_panel, bg=self.estilo.bg2)
         self.cores_frame._bg_rol = "bg2"
         self.cores_frame.pack(fill="x", padx=6, pady=(0, 6))
+
 
         # ── RAM ──
         ram_panel = make_panel(scroll_frame, "RAM", self.estilo)
@@ -146,6 +148,72 @@ class MonitorApp:
         self._lbl_load5  = self._make_load_label(self._load_frame, "5 min")
         self._lbl_load15 = self._make_load_label(self._load_frame, "15 min")
 
+        # ── POWER — aparece solo si hay sensor de voltaje (Raspi) ──
+        self._power_panel = make_panel(scroll_frame, "POWER", self.estilo)
+        power_row = tk.Frame(self._power_panel, bg=self.estilo.bg2)
+        etiquetar(power_row, ROL_BG2)
+        power_row.pack(fill="x", padx=6, pady=(2, 6))
+
+        lbl_power_name = tk.Label(power_row, text="Supply",
+                                  bg=self.estilo.bg2, fg=self.estilo.muted,
+                                  font=F_SMALL, width=8, anchor="w")
+        etiquetar(lbl_power_name, ROL_BG2, ROL_MUTED)
+        lbl_power_name.pack(side="left")
+
+        self._lbl_power_dot = tk.Label(power_row, text="●",
+                                       bg=self.estilo.bg2, fg=self.estilo.muted,
+                                       font=F_NORMAL)
+        etiquetar(self._lbl_power_dot, ROL_BG2, ROL_MUTED)
+        self._lbl_power_dot.pack(side="left", padx=(4, 4))
+
+        self._lbl_power_status = tk.Label(power_row, text="--",
+                                          bg=self.estilo.bg2, fg=self.estilo.muted,
+                                          font=F_SMALL)
+        etiquetar(self._lbl_power_status, ROL_BG2, ROL_MUTED)
+        self._lbl_power_status.pack(side="left")
+
+        self._power_panel.pack_forget()  # oculto hasta confirmar sensor
+
+
+       # ── TOP PROCESSES ──
+        top_panel = make_panel(scroll_frame, "TOP PROCESSES", self.estilo)
+ 
+        # Subencabezado CPU
+        lbl_top_cpu_hdr = tk.Label(top_panel, text="CPU %",
+                                   bg=self.estilo.bg2, fg=self.estilo.muted,
+                                   font=F_SMALL, anchor="w")
+        etiquetar(lbl_top_cpu_hdr, ROL_BG2, ROL_MUTED)
+        lbl_top_cpu_hdr.pack(fill="x", padx=6, pady=(4, 0))
+ 
+        self._top_cpu_frame = tk.Frame(top_panel, bg=self.estilo.bg2)
+        self._top_cpu_frame._bg_rol = "bg2"
+        self._top_cpu_frame.pack(fill="x", padx=6)
+ 
+        sep_top = tk.Frame(top_panel, bg=self.estilo.border, height=1)
+        sep_top._bg_rol = "border"
+        sep_top.pack(fill="x", padx=6, pady=4)
+ 
+        # Subencabezado RAM
+        lbl_top_ram_hdr = tk.Label(top_panel, text="RAM MiB",
+                                   bg=self.estilo.bg2, fg=self.estilo.muted,
+                                   font=F_SMALL, anchor="w")
+        etiquetar(lbl_top_ram_hdr, ROL_BG2, ROL_MUTED)
+        lbl_top_ram_hdr.pack(fill="x", padx=6)
+ 
+        self._top_ram_frame = tk.Frame(top_panel, bg=self.estilo.bg2)
+        self._top_ram_frame._bg_rol = "bg2"
+        self._top_ram_frame.pack(fill="x", padx=6, pady=(0, 6))
+ 
+        self._top_cpu_widgets: list[tuple[tk.Label, tk.Label]] = []
+        self._top_ram_widgets: list[tuple[tk.Label, tk.Label]] = []
+ 
+        # Pre-crear 5 filas para cada lista
+        for _ in range(5):
+            self._top_cpu_widgets.append(
+                self._make_proc_row(self._top_cpu_frame))
+            self._top_ram_widgets.append(
+                self._make_proc_row(self._top_ram_frame))
+ 
     # ─── Helpers de construcción ─────────────────────────────────────────────
 
     def _make_load_label(self, parent: tk.Frame, period: str) -> tk.Label:
@@ -164,6 +232,20 @@ class MonitorApp:
         etiquetar(lbl_val, ROL_BG2, ROL_WHITE)
         lbl_val.pack(side="right")
         return lbl_val
+
+    def _make_proc_row(self, parent: tk.Frame) -> tuple[tk.Label, tk.Label]:
+        row = tk.Frame(parent, bg=self.estilo.bg2)
+        etiquetar(row, ROL_BG2)
+        row.pack(fill="x")
+        lbl_name = tk.Label(row, text="", bg=self.estilo.bg2,
+                            fg=self.estilo.muted, font=F_SMALL, anchor="w")
+        etiquetar(lbl_name, ROL_BG2, ROL_MUTED)
+        lbl_name.pack(side="left")
+        lbl_val = tk.Label(row, text="", bg=self.estilo.bg2,
+                           fg=self.estilo.white, font=F_SMALL)
+        etiquetar(lbl_val, ROL_BG2, ROL_WHITE)
+        lbl_val.pack(side="right")
+        return lbl_name, lbl_val
 
     # ─── Selectores ──────────────────────────────────────────────────────────
 
@@ -226,7 +308,7 @@ class MonitorApp:
     def _tick(self):
         if self._paused:
             return
-        cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load = get_latest()
+        cpu, gpu, cores, cpu_temp, cpu_usage, gpu_usage, ram, net, freq, load, power, procs_cpu, procs_ram = get_latest()
 
         # GPU panel: aparece/desaparece según datos
         if gpu is not None:
@@ -250,6 +332,9 @@ class MonitorApp:
         self._refresh_ram(ram)
         self._refresh_net(net)
         self._refresh_load(load)
+        self._refresh_power(power)
+        self._refresh_procs(self._top_cpu_widgets, procs_cpu, "{:.1f}%", is_cpu=True)
+        self._refresh_procs(self._top_ram_widgets, procs_ram, "{:.1f} MiB", is_cpu=False)
 
         # Acumular historiales
         if self._cpu_collecting:
@@ -283,10 +368,13 @@ class MonitorApp:
             bar["value"] = 0
 
     def _refresh_ram(self, ram: RamInfo | None):
+        
         if ram is None:
             self._ram_label.config(text="--", fg=self.estilo.white)
             self._ram_bar["value"] = 0
             return
+        
+        self._ram_total_mib = ram.total_mib
         if ram.pct < 60:
             color, fg_rol = self.estilo.green, "green"
         elif ram.pct < 85:
@@ -312,6 +400,7 @@ class MonitorApp:
                 lbl_name = tk.Label(row, text=iface.name,
                                     bg=self.estilo.bg2, fg=self.estilo.muted,
                                     font=F_SMALL, width=8, anchor="w")
+                lbl_name.bind("<Button-1>", lambda e, n=iface.name: self._open_speed_panel(n))
                 etiquetar(lbl_name, ROL_BG2, ROL_MUTED)
                 lbl_name.pack(side="left")
 
@@ -332,6 +421,17 @@ class MonitorApp:
             _, lbl_recv, lbl_sent = self._net_widgets[iface.name]
             lbl_recv.config(text=f"↓ {self._fmt_net(iface.recv_kbps)}")
             lbl_sent.config(text=f"↑ {self._fmt_net(iface.sent_kbps)}")
+
+            # ── historial para SpeedPanel ──
+            h = self._net_hist.setdefault(iface.name, {
+                "rx": [], "tx": [], "peak_rx": 0.0, "peak_tx": 0.0
+            })
+            h["rx"].append(iface.recv_kbps)
+            h["tx"].append(iface.sent_kbps)
+            if len(h["rx"]) > 30: h["rx"].pop(0)
+            if len(h["tx"]) > 30: h["tx"].pop(0)
+            if iface.recv_kbps > h["peak_rx"]: h["peak_rx"] = iface.recv_kbps
+            if iface.sent_kbps > h["peak_tx"]: h["peak_tx"] = iface.sent_kbps
 
         to_delete = [n for n in self._net_widgets if n not in current]
         for name in to_delete:
@@ -361,6 +461,30 @@ class MonitorApp:
                 color, rol = self.estilo.red, "red"
             lbl.config(text=f"{val:.2f}", fg=color)
             lbl._fg_rol = rol
+
+    def _refresh_power(self, power: PowerInfo | None):
+        if power is None:
+            if self._has_power:
+                self._has_power = False
+                self._power_panel.pack_forget()
+            return
+
+        if not self._has_power:
+            self._has_power = True
+            self._power_panel.pack(fill="x", pady=3, padx=6)
+
+        status = power.status
+        if status == "ok":
+            color, rol, text = self.estilo.green, "green", "OK"
+        elif status == "critical":
+            color, rol, text = self.estilo.red, "red", "Under-voltage"
+        else:
+            color, rol, text = self.estilo.orange, "orange", "Fault"
+
+        self._lbl_power_dot.config(fg=color)
+        self._lbl_power_dot._fg_rol = rol
+        self._lbl_power_status.config(text=text, fg=color)
+        self._lbl_power_status._fg_rol = rol
 
     def _freq_color(self, mhz: float) -> tuple[str, str]:
         """Color de frecuencia relativo al boost máximo (i3-9100F: 4200MHz)."""
@@ -418,8 +542,9 @@ class MonitorApp:
             if self._cores_are_mhz:
                 # ARM: solo freq, sin encabezado
                 self._cores_header.pack_forget()
-                lbl_temp.config(text=f"{val:.0f} MHz", fg=self.estilo.white)
-                lbl_temp._fg_rol = "white"
+                color, rol = self._freq_color(val) 
+                lbl_temp.config(text=f"{val:.0f} MHz", fg=color)
+                lbl_temp._fg_rol = rol
                 lbl_freq.config(text="")
             else:
                 # Intel: temp en lbl_temp, freq en lbl_freq
@@ -433,6 +558,47 @@ class MonitorApp:
         for name in to_delete:
             self.core_widgets[name][0].master.destroy()
             del self.core_widgets[name]
+
+    def _refresh_procs(self, widgets: list, procs: list[ProcessInfo], fmt: str, is_cpu: bool = False):
+        for i, (lbl_name, lbl_val) in enumerate(widgets):
+            if i < len(procs):
+                p = procs[i]
+                name = p.name if len(p.name) <= 22 else p.name[:20] + "…"
+                lbl_name.config(text=name)
+
+                if is_cpu:
+                    if p.value < 30:
+                        color, rol = self.estilo.green, "green"
+                    elif p.value < 70:
+                        color, rol = self.estilo.orange, "orange"
+                    else:
+                        color, rol = self.estilo.red, "red"
+
+                else:  # RAM en MiB — relativo al total del sistema
+                    pct = (p.value / self._ram_total_mib) * 100
+                    if pct < 30:
+                        color, rol = self.estilo.green, "green"
+                    elif pct < 60:
+                        color, rol = self.estilo.orange, "orange"
+                    else:
+                        color, rol = self.estilo.red, "red"
+
+
+                lbl_val.config(text=fmt.format(p.value), fg=color)
+                lbl_val._fg_rol = rol
+            else:
+                lbl_name.config(text="")
+                lbl_val.config(text="")
+    def _open_speed_panel(self, iface_name: str):
+        from vista.speed_panel import SpeedPanel
+        h = self._net_hist.get(iface_name, {"rx": [], "tx": [], "peak_rx": 0.0, "peak_tx": 0.0})
+        from modelo.config import get_ip
+        SpeedPanel(self.estilo, self.root,
+                label=iface_name,
+                ip=get_ip(),
+                mac="",
+                net_hist=h)
+
 
     def _tick_clock(self):
         self.clock_lbl.config(text=datetime.now().strftime("%H:%M:%S"))

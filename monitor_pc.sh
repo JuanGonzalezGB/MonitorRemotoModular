@@ -33,10 +33,10 @@ CORES_INTEL=$(echo "$DATA" | grep "Core" | grep input | grep -v alarm | grep -v 
 
 if [ -z "$CORES_INTEL" ]; then
     FREQ_LINES=$(echo "$DATA" | grep 'netdata_cpufreq_cpufreq_MHz_average' | grep -v '^#' | \
-        sed -E 's/.*dimension="cpu([0-9]+)"[^}]*\} ([0-9.]+) [0-9]+$/Cpu \1:\2/')
-    UNIQUE_FREQS=$(echo "$FREQ_LINES" | sed -E 's/Cpu [0-9]+://' | sort -u | wc -l)
+        sed -E 's/.*dimension="cpu([0-9]+)"[^}]*\} ([0-9.]+) [0-9]+$/Core \1:\2/')
+    UNIQUE_FREQS=$(echo "$FREQ_LINES" | sed -E 's/Core [0-9]+://' | sort -u | wc -l)
     if [ "$UNIQUE_FREQS" -eq 1 ]; then
-        FREQ_VAL=$(echo "$FREQ_LINES" | sed -E 's/Cpu [0-9]+://' | head -1)
+        FREQ_VAL=$(echo "$FREQ_LINES" | sed -E 's/Core [0-9]+://' | head -1)
         echo "CPU Freq:$FREQ_VAL"
     else
         echo "$FREQ_LINES"
@@ -96,11 +96,10 @@ fi
 echo ""
 
 # ─── RED (interfaces reales) ──────────────────────────────────────────────────
-# dimension viene antes que device en el output de Netdata, se extrae con dos greps
 echo "NET:"
 echo "$DATA" | grep 'netdata_net_net_kilobits_persec_average' | grep -v '^#' | \
     grep 'interface_type="real"' | \
-    sed -E 's/.*dimension="([^"]+)".*device="([^"]+)".*\} ([0-9.]+) [0-9]+$/\2:\1:\3/'
+    sed -E 's/.*dimension="([^"]+)".*device="([^"]+)".*\} (-?[0-9.]+) [0-9]+$/\2:\1:\3/'
 
 # ─── FRECUENCIA POR CORE (Intel y ARM) ───────────────────────────────────────
 echo "FREQ:"
@@ -118,3 +117,32 @@ LOAD15=$(echo "$DATA" | grep 'netdata_system_load_load_average' | grep -v '^#' |
 if [ -n "$LOAD1" ] && [ -n "$LOAD5" ] && [ -n "$LOAD15" ]; then
     echo "${LOAD1}:${LOAD5}:${LOAD15}"
 fi
+
+# ─── VOLTAJE / ESTADO ALIMENTACIÓN (Raspi) ───────────────────────────────────
+echo "POWER:"
+VOLT_CLEAR=$(echo "$DATA" | grep 'netdata_system_hw_sensor_voltage_alarm_status_average' | \
+    grep -v '^#' | grep 'rpi_volt' | grep 'dimension="clear"' | \
+    sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/' | head -1)
+VOLT_CRIT=$(echo "$DATA" | grep 'netdata_system_hw_sensor_voltage_alarm_status_average' | \
+    grep -v '^#' | grep 'rpi_volt' | grep 'dimension="critical"' | \
+    sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/' | head -1)
+VOLT_FAULT=$(echo "$DATA" | grep 'netdata_system_hw_sensor_voltage_alarm_status_average' | \
+    grep -v '^#' | grep 'rpi_volt' | grep 'dimension="fault"' | \
+    sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/' | head -1)
+if [ -n "$VOLT_CLEAR" ]; then
+    echo "${VOLT_CLEAR}:${VOLT_CRIT:-0}:${VOLT_FAULT:-0}"
+fi
+
+# ─── TOP PROCESOS por CPU ─────────────────────────────────────────────────────
+echo "PROCS_CPU:"
+echo "$DATA" | grep 'netdata_app_cpu_utilization_percentage_average' | grep -v '^#' | \
+    sed -E 's/.*app_group="([^"]+)".*\} ([0-9.]+) [0-9]+$/\1 \2/' | \
+    LC_ALL=C awk '{cpu[$1]+=$2} END {for(p in cpu) print p":"cpu[p]}' | \
+    LC_ALL=C sort -t: -k2 -rn | head -5
+
+# ─── TOP PROCESOS por RAM ─────────────────────────────────────────────────────
+echo "PROCS_RAM:"
+echo "$DATA" | grep 'netdata_app_mem_usage_MiB_average' | grep -v '^#' | \
+    grep 'dimension="rss"' | \
+    sed -E 's/.*app_group="([^"]+)".*\} ([0-9.]+) [0-9]+$/\1:\2/' | \
+    LC_ALL=C sort -t: -k2 -rn | head -5
