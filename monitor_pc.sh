@@ -10,10 +10,18 @@ DATA=$(curl -s "http://$IP:19999/api/v1/allmetrics?format=prometheus")
 
 # ─── CPU TOTAL ────────────────────────────────────────────────────────────────
 echo "CPU:"
-
 CPU_VAL=$(echo "$DATA" | grep "Package id 0" | grep input | grep -v alarm | grep -v '^#' | \
     sed -E "s/.* ([0-9.]+) .*/\1/" | head -1)
 
+# Fallback ARM: go.d sensors cpu_thermal
+if [ -z "$CPU_VAL" ]; then
+    CPU_VAL=$(echo "$DATA" | \
+        grep 'netdata_sensors_chip_sensor_temperature_Celsius_average' | grep -v '^#' | \
+        grep 'cpu_thermal' | \
+        sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/' | head -1)
+fi
+
+# Fallback final: uso de CPU si no hay sensor térmico
 if [ -z "$CPU_VAL" ]; then
     USER=$(echo "$DATA" | grep 'netdata_system_cpu_percentage_average' | grep -v '^#' | \
         grep 'dimension="user"' | sed -E 's/.* ([0-9.]+) [0-9]+$/\1/')
@@ -57,6 +65,15 @@ CPU_TEMP=$(echo "$DATA" | \
     grep 'netdata_system_hw_sensor_temperature_input_degrees_Celsius_average' | grep -v '^#' | \
     grep -v alarm | \
     sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/' | head -1)
+
+# Fallback: formato go.d sensors (ARM/Raspi - cpu_thermal)
+if [ -z "$CPU_TEMP" ]; then
+    CPU_TEMP=$(echo "$DATA" | \
+        grep 'netdata_sensors_chip_sensor_temperature_Celsius_average' | grep -v '^#' | \
+        grep 'cpu_thermal' | \
+        sed -E 's/.*\} ([0-9.]+) [0-9]+$/\1/' | head -1)
+fi
+
 echo "${CPU_TEMP:-}"
 
 # ─── CPU USAGE % ─────────────────────────────────────────────────────────────
