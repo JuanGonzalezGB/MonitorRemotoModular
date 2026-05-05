@@ -1,4 +1,4 @@
-from estilo import dark, light, matrix, crimson, teal, gono
+from estilo import dark, light, matrix, crimson, teal
 
 # ─── Registro de temas ───────────────────────────────────────────────────────
 # Para agregar un tema:
